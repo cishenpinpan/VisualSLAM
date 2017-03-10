@@ -17,6 +17,8 @@ View::View(const vector<Mat> _imgs)
     }
     idBook = map<long, int>();
     stereo = imgs.size() == 2 ? true : false;
+    IdGenerator *idGenerator = IdGenerator::createInstance();
+    id = idGenerator->next();
 }
 
 View::View(const vector<Mat> _imgs, const FeatureSet _leftFeatureSet)
@@ -35,6 +37,8 @@ View::View(const vector<Mat> _imgs, const FeatureSet _leftFeatureSet)
         idBook.insert(make_pair(ids[i], i));
     }
     stereo = imgs.size() == 2 ? true : false;
+    IdGenerator *idGenerator = IdGenerator::createInstance();
+    id = idGenerator->next();
 }
 
 View::View(View* v)
@@ -45,6 +49,8 @@ View::View(View* v)
     idBook = v->getIdBook();
     pose = v->getPose().clone();
     stereo = imgs.size() == 2 ? true : false;
+    IdGenerator *idGenerator = IdGenerator::createInstance();
+    id = idGenerator->next();
 }
 
 View::~View()
@@ -52,6 +58,10 @@ View::~View()
     deleteImgs();
     idBook.clear();
     pose.release();
+}
+long View::getId()
+{
+    return id;
 }
 vector<Mat> View::getImgs()
 {
@@ -151,36 +161,6 @@ Mat View::getT()
     return pose(Rect(3, 0, 1, 3)).clone();
 }
 
-Mat View::getLeftProjectionMatrix()
-{
-    Mat pR;
-    transpose(getR(), pR);
-    Mat pT = getT();
-    Mat RT = Mat::zeros(3, 4, CV_64F);
-    Mat aux = RT(Rect(0, 0, 3, 3));
-    pR.copyTo(aux);
-    aux = RT(Rect(3, 0, 1, 3));
-    pT.copyTo(aux);
-    Mat projectionMatrix = CameraParameters::getIntrinsic() * RT;
-    return projectionMatrix.clone();
-}
-Mat View::getRightProjectionMatrix()
-{
-    Mat R = getR(), T = getT(), T0 = Mat::zeros(3, 1, CV_64F);
-    T0.at<double>(0, 0) = 0.537;
-    T = T + T0;
-    cout << "T: " << T << endl;
-    Mat pR;
-    transpose(R, pR);
-    Mat pT = -pR * T;
-    Mat RT = Mat::zeros(3, 4, CV_64F);
-    Mat aux = RT(Rect(0, 0, 3, 3));
-    pR.copyTo(aux);
-    aux = RT(Rect(3, 0, 1, 3));
-    pT.copyTo(aux);
-    Mat projectionMatrix = CameraParameters::getIntrinsic() * RT;
-    return projectionMatrix.clone();
-}
 
 Mat View::getRelativePose(View* v)
 {

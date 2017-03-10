@@ -8,6 +8,12 @@
 
 #include "Feature.h"
 
+void FeatureSet::clear()
+{
+    // clear feature points and ids
+    featurePoints.clear();
+    ids.clear();
+}
 void FeatureSet::addFeature(Feature feature)
 {
     addFeature(feature.getPoint(), feature.getId());
@@ -16,4 +22,8 @@ void FeatureSet::addFeature(Point2f point2d, long id)
 {
     featurePoints.push_back(point2d);
     ids.push_back(id);
+}
+int FeatureSet::size()
+{
+    return featurePoints.size();
 }

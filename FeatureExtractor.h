@@ -11,10 +11,10 @@
 
 #include "opencv2/features2d.hpp"
 #include "Feature.h"
-#include "Utility.h"
+#include "Factory.h"
 #include <stdio.h>
-#include <vector>
 #include <set>
+#include <map>
 
 using namespace std;
 using namespace cv;
@@ -22,5 +22,6 @@ using namespace cv;
 class FeatureExtractor {
 public:
     vector<KeyPoint> extractFeatures(Mat img_1, FeatureSet& featureSet);
+    vector<KeyPoint> reextractFeatures(Mat img_1, FeatureSet& featureSet);
 };
 #endif /* FeatureExtractor_h */

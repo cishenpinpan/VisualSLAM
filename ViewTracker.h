@@ -21,10 +21,24 @@
 #include "FeatureExtractor.h"
 #include "Utility.h"
 #include "Canvas.h"
+#include "Converter.h"
+#include "g2o/core/sparse_optimizer.h"
+#include "g2o/core/block_solver.h"
+#include "g2o/core/solver.h"
+#include "g2o/core/robust_kernel_impl.h"
+#include "g2o/core/optimization_algorithm_levenberg.h"
+#include "g2o/solvers/cholmod/linear_solver_cholmod.h"
+#include "g2o/solvers/dense/linear_solver_dense.h"
+#include "g2o/types/sba/types_six_dof_expmap.h"
+//#include "g2o/math_groups/se3quat.h"
+#include "g2o/solvers/structure_only/structure_only_solver.h"
+
+#include "g2o/types/slam3d/vertex_se3.h"
+#include "g2o/types/slam3d/edge_se3.h"
 #include <cvsba/cvsba.h>
 #include <set>
 
-using namespace cvsba;
+using namespace Eigen;
 
 class ViewTracker
 {
@@ -34,19 +48,16 @@ public:
     void addView(View *v);
     vector<View*> getViews();
     void bundleAdjust();
-    View* getPrevView();
-    View* getCurrView();
+    void computeLandmarks();
+    View* getLastView();
     View* popLastView();
-    void rejectOutliers(const Mat _mask);
-    
 private:
-    
+    int nBundleAdjusted;
     FeatureTracker *featureTracker;
     FeatureExtractor *featureExtractor;
     vector<View*> views;
-    void trackFeatures(View *v1, View *v2);
-    set<int> findSurvivingFids();
-    double reproject3DPoints(vector<Point3d> points3D, Mat pose, vector<Point2f> points2D);
+    map<long, View*> viewBook;
+    map<long, Landmark> landmarkBook;
 };
 
 #endif /* ViewTracker_h */

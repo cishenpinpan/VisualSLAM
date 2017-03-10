@@ -26,6 +26,7 @@ public:
     ViewReader(string _dataset, string _track, bool _stereo);
     // get next view
     vector<Mat> next();
+    string getTrack(){return track;}
     
 private:
     string dataset;

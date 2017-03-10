@@ -14,7 +14,6 @@
 #include "opencv2/core.hpp"
 #include "opencv2/features2d.hpp"
 #include "opencv2/highgui/highgui.hpp"
-#include "camera.hpp"
 
 using namespace std;
 using namespace cv;

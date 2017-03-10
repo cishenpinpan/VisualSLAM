@@ -58,5 +58,6 @@ private:
     Mat estimatePoseMono(View *v1, View *v2);
     FeatureExtractor *featureExtractor;
     FeatureTracker *featureTracker;
+    void rejectOutliers(View *v1, View *v2, Mat status);
 };
 #endif /* PoseEstimator_h */

@@ -11,6 +11,7 @@
 #include "opencv2/features2d.hpp"
 #include "CameraParameters.h"
 #include "Feature.h"
+#include "Factory.h"
 #include <iostream>
 #include <vector>
 #include <map>
@@ -25,6 +26,7 @@ public:
     ~View();
     View(const vector<Mat> _imgs);
     View(const vector<Mat> _imgs, const FeatureSet _leftFeatureSet);
+    long getId();
     vector<Mat> getImgs();
     void setImgs(const vector<Mat> _imgs);
     void deleteImgs();
@@ -41,14 +43,13 @@ public:
     void setPose(const Mat _R, const Mat _T);
     Mat getR();
     Mat getT();
-    Mat getLeftProjectionMatrix();
-    Mat getRightProjectionMatrix();
     Mat getRelativePose(View* v);
     Mat getRelativeR(View *v);
     Mat getRelativeT(View *v);
     void setGroundTruth(const Mat _gt);
     Mat getGroundTruth();
 private:
+    long id;
     Mat gt;
     vector<Mat> imgs;
     FeatureSet leftFeatureSet;

@@ -16,6 +16,24 @@ vector<KeyPoint> FeatureExtractor::extractFeatures(Mat img, FeatureSet& featureS
     bool nonmaxSuppression = true;
     FAST(img, keypoints, fast_threshold, nonmaxSuppression);
     KeyPoint::convert(keypoints, newPoints, vector<int>());
+    // remove existing feature points
+    featureSet.clear();
+    IdGenerator* idGenerator = IdGenerator::createInstance();
+    for(int i = 0; i < newPoints.size(); i++)
+    {
+        featureSet.addFeature(newPoints[i], idGenerator->next());
+    }
+    return keypoints;
+}
+
+vector<KeyPoint> FeatureExtractor::reextractFeatures(Mat img, FeatureSet& featureSet)
+{
+    vector<Point2f> newPoints;
+    vector<KeyPoint> keypoints;
+    int fast_threshold = 20;
+    bool nonmaxSuppression = true;
+    FAST(img, keypoints, fast_threshold, nonmaxSuppression);
+    KeyPoint::convert(keypoints, newPoints, vector<int>());
     // append newly extracted feature points back to existing feature set
     map<double, set<double>> existingPointSet;
     vector<Point2f> existingPoints = featureSet.getFeaturePoints();

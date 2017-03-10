@@ -44,6 +44,18 @@ public:
     Feature getFeatureByIndex(int index){return Feature(featurePoints[index], ids[index]);}
     void addFeature(Feature feature);
     void addFeature(Point2f, const long id);
+    void clear();
+    int size();
+};
+
+class Landmark
+{
+    public:
+    Point3d point3d;
+    long id;
+    Landmark(Point3d _point3d, long _id) : point3d(_point3d), id(_id){};
+    Point3d getPoint(){return point3d;}
+    void setPoint(const Point3d &_point3d){point3d = Point3d(_point3d);}
 };
 
 #endif /* Feature_h */
