@@ -23,7 +23,9 @@ class CameraParameters
 public:
     static double focal;
     static Point2d principal;
+    static vector<float> distCoeff;
     static Mat getIntrinsic();
     static Mat getStereoPose();
+    static Mat getDistCoeff();
 };
 #endif /* CameraParameters_h */

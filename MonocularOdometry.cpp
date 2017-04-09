@@ -28,11 +28,13 @@ vector<vector<double>> MonocularOdometry::readGroundTruth(int numPoses, ViewRead
     return gt;
 }
 
+vector<int> keyFrames;
 void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtractor, FeatureTracker *featureTracker,    ViewTracker *viewTracker, PoseEstimator *poseEstimator, vector<Mat> &Trs, vector<View*> &views)
 {
     // read ground truth
     vector<vector<double>> gt = readGroundTruth(NUM_POSES, reader);
     
+    // initial pose
     Mat Tr = Mat::eye(4, 4, CV_64F);
     
     // initial image
@@ -44,21 +46,21 @@ void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtract
     // extract features for it
     featureExtractor->extractFeatures(prevView->getImgs()[0], prevView->getLeftFeatureSet());
     
+    
     list<detail::CameraParams> cameraPoses;
     
     // build an initial view tracker
     viewTracker->addView(prevView);
+    // set first view as key view
+    viewTracker->setKeyView(prevView);
+    keyFrames.push_back(0);
     
     Trs.push_back(Tr.clone());
     
-    Mat prevPose = Mat::eye(4, 4, CV_64F);
-    Mat currPose = Mat::eye(4, 4, CV_64F);
-    
-    for(int i = 0; i < NUM_POSES; i++)
+    for(int i = 2; i < NUM_POSES; i++)
     {
-        
-        if((i + 1) % 20 == 0)
-            cout << "frame: " << i + 1 << endl;
+        if((i + 1) % 1 == 0)
+            cout << "frame: " << i << endl;
         // 1. read in next image
         images = reader->next();
         vector<Mat> currImgs = images;
@@ -66,91 +68,62 @@ void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtract
         // 2. initialize next view
         View *currView = new View(currImgs);
         viewTracker->addView(currView);
+        currView->setPose(Tr);
         
-        // 3. estimate pose from monocular odometry
-        // 3.1 estimate R and t
-        Mat poseChange = poseEstimator->estimatePose(prevView, currView);
-        
-        // 4. use ground truth scale if necessary
-        double scale = pow(gt[i][3] - gt[i + 1][3], 2) +
-        pow(gt[i][7] - gt[i + 1][7], 2) +
-        pow(gt[i][11] - gt[i + 1][11], 2);
-        scale = sqrt(scale);
-        poseChange.at<double>(0, 3) = poseChange.at<double>(0, 3) * scale;
-        poseChange.at<double>(1, 3) = poseChange.at<double>(1, 3) * scale;
-        poseChange.at<double>(2, 3) = poseChange.at<double>(2, 3) * scale;
-        //        t = scale * t;
-        
-        prevPose.at<double>(0, 0) = gt[i][0];
-        prevPose.at<double>(0, 1) = gt[i][1];
-        prevPose.at<double>(0, 2) = gt[i][2];
-        prevPose.at<double>(1, 0) = gt[i][4];
-        prevPose.at<double>(1, 1) = gt[i][5];
-        prevPose.at<double>(1, 2) = gt[i][6];
-        prevPose.at<double>(2, 0) = gt[i][8];
-        prevPose.at<double>(2, 1) = gt[i][9];
-        prevPose.at<double>(2, 2) = gt[i][10];
-        prevPose.at<double>(0, 3) = gt[i][3];
-        prevPose.at<double>(1, 3) = gt[i][7];
-        prevPose.at<double>(2, 3) = gt[i][11];
-        
-        currPose.at<double>(0, 0) = gt[i + 1][0];
-        currPose.at<double>(0, 1) = gt[i + 1][1];
-        currPose.at<double>(0, 2) = gt[i + 1][2];
-        currPose.at<double>(1, 0) = gt[i + 1][4];
-        currPose.at<double>(1, 1) = gt[i + 1][5];
-        currPose.at<double>(1, 2) = gt[i + 1][6];
-        currPose.at<double>(2, 0) = gt[i + 1][8];
-        currPose.at<double>(2, 1) = gt[i + 1][9];
-        currPose.at<double>(2, 2) = gt[i + 1][10];
-        currPose.at<double>(0, 3) = gt[i + 1][3];
-        currPose.at<double>(1, 3) = gt[i + 1][7];
-        currPose.at<double>(2, 3) = gt[i + 1][11];
-        
-        Mat groundTruthPose = prevPose.inv() * currPose;
-        
-        // 5 skipping frame conditions
-        currView->setGroundTruth(currPose.clone());
-        double lambda = poseChange.at<double>(2, 3);
-        //        cout << poseChange(Rect(3, 0 ,1 ,3)) << endl;
-        //        cout << groundTruthPose(Rect(3, 0, 1, 3)) << endl;
-        if(scale <= 0.1)
+        // skip first 5 frames
+        if(i < KEYFRAME_INTERVAL)
         {
-            cout << "Bad estimation(slow motion)." << endl;
-            Tr = Tr * groundTruthPose;
+            continue;
         }
-        else if(lambda >= 5)
+        // build initial map
+        if(i == KEYFRAME_INTERVAL)
         {
-            cout << "Bad estimation(lambda too big)." << endl;
-            Tr = Tr * groundTruthPose;
-        }
-        else if(abs(poseChange.at<double>(0, 3)) >= 0.4 * abs(poseChange.at<double>(2, 3)) ||
-                abs(poseChange.at<double>(1, 3)) >= 0.4 * abs(poseChange.at<double>(2, 3)))
-        {
-            cout << "Bad estimation(horizontal move)." << endl;
-            Tr = Tr * groundTruthPose;
+            // track features
+            featureTracker->track(prevView->getImgs()[0], currView->getImgs()[0], prevView->getLeftFeatureSet(), currView->getLeftFeatureSet(), false);
+            
+            Mat poseChange = poseEstimator->estimatePose(prevView, currView);
+            poseChange.at<double>(0, 3) = poseChange.at<double>(0, 3) * 6.5;
+            poseChange.at<double>(1, 3) = poseChange.at<double>(1, 3) * 6.5;
+            poseChange.at<double>(2, 3) = poseChange.at<double>(2, 3) * 6.5;
+            Tr = Tr * poseChange;
+            currView->setPose(Tr);
+            viewTracker->setKeyView(currView);
+            keyFrames.push_back(i);
+            viewTracker->bundleAdjust();
+            Canvas canvas;
+            vector<Point2f> ps1, ps2;
+            KeyPoint::convert(prevView->getLeftFeatureSet().getFeaturePoints(), ps1);
+            KeyPoint::convert(currView->getLeftFeatureSet().getFeaturePoints(), ps2);
+//            canvas.drawFeatureMatches(prevView->getImgs()[0], currView->getImgs()[0], ps1, ps2);
         }
         else
         {
-            Tr = Tr * poseChange;
+            featureTracker->searchLandmarks(currView, viewTracker->getLandmarkBook(), viewTracker->getLastKeyView());
+            map<long, Landmark> landmarkBook = viewTracker->getLandmarkBook();
+            
+            cout << "features: " << currView->getLeftFeatureSet().size() << endl;
+            // 3. estimate pose from PnP (motion-only BA)
+            Tr = poseEstimator->solvePnP(currView, landmarkBook);
+            cout << Tr.col(3).rowRange(0, 3) << endl;
+            currView->setPose(Tr);
         }
         
-        Trs.push_back(Tr.clone());
-        currView->setPose(Tr.clone());
-        
-        // 6. compute landmarks
-        viewTracker->computeLandmarks();
-        
-        // 8. update view
+        // 4. update view
         prevView = currView;
         // re-detect if necessary
-        if(prevView->getLeftFeatureSet().size() < FEATURE_REDETECTION_TRIGGER)
+        if(i != 0 && i - keyFrames.back() >= KEYFRAME_INTERVAL)
         {
-            viewTracker->bundleAdjust();
-            featureExtractor->reextractFeatures(prevView->getImgs()[0], prevView->getLeftFeatureSet());
+            View* prevKeyView = viewTracker->getLastKeyView();
+            featureExtractor->reextractFeatures(prevKeyView->getImgs()[0], prevKeyView->getLeftFeatureSet());
+            featureTracker->track(prevKeyView->getImgs()[0], prevView->getImgs()[0], prevKeyView->getLeftFeatureSet(), prevView->getLeftFeatureSet(), false);
+            viewTracker->setKeyView(prevView);
+            keyFrames.push_back(i);
         }
+        // update Tr
+        Tr = viewTracker->getLastView()->getPose();
+        
+        Trs.push_back(Tr.clone());
     }
-    viewTracker->bundleAdjust();
     views = viewTracker->getViews();
 }
 
@@ -175,6 +148,13 @@ void MonocularOdometry::save(string track, vector<View*> views)
                 
             }
         }
+    }
+    output.close();
+    output.open("/Users/orangechicken/Desktop/SLAM/KITTI_" + track + "_KeyFrames.output");
+    for(int i = 0; i < keyFrames.size(); i++)
+    {
+        output << keyFrames[i];
+        output << "\n";
     }
     output.close();
 }

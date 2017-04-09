@@ -1,2 +1,0 @@
-# VisualSLAM
-Blindfind Visual SLAM

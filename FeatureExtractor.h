@@ -10,6 +10,9 @@
 #define FeatureExtractor_h
 
 #include "opencv2/features2d.hpp"
+#include "opencv2/xfeatures2d.hpp"
+#include "opencv2/highgui/highgui.hpp"
+#include "opencv2/imgproc/imgproc.hpp"
 #include "Feature.h"
 #include "Factory.h"
 #include <stdio.h>
@@ -18,6 +21,7 @@
 
 using namespace std;
 using namespace cv;
+using namespace cv::xfeatures2d;
 
 class FeatureExtractor {
 public:

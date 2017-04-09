@@ -19,6 +19,7 @@ View::View(const vector<Mat> _imgs)
     stereo = imgs.size() == 2 ? true : false;
     IdGenerator *idGenerator = IdGenerator::createInstance();
     id = idGenerator->next();
+    keyView = false;
 }
 
 View::View(const vector<Mat> _imgs, const FeatureSet _leftFeatureSet)
@@ -39,6 +40,7 @@ View::View(const vector<Mat> _imgs, const FeatureSet _leftFeatureSet)
     stereo = imgs.size() == 2 ? true : false;
     IdGenerator *idGenerator = IdGenerator::createInstance();
     id = idGenerator->next();
+    keyView = false;
 }
 
 View::View(View* v)
@@ -51,6 +53,7 @@ View::View(View* v)
     stereo = imgs.size() == 2 ? true : false;
     IdGenerator *idGenerator = IdGenerator::createInstance();
     id = idGenerator->next();
+    keyView = false;
 }
 
 View::~View()
@@ -101,16 +104,26 @@ Feature View::getLeftFeatureById(long id)
     if(idBook.count(id) == 0)
     {
         cout << "Point id does not exist." << endl;
-        return Feature({0.0, 0.0}, -1);
+        return Feature(KeyPoint({0.0, 0.0}, 1.f), -1);
     }
     return leftFeatureSet.getFeatureByIndex(idBook[id]);
+}
+void View::removeLeftFeatureById(long id)
+{
+    leftFeatureSet.removeFeature(id);
+    idBook.erase(id);
+}
+void View::removeRightFeatureById(long id)
+{
+    rightFeatureSet.removeFeature(id);
+    idBook.erase(id);
 }
 Feature View::getRightFeatureById(long id)
 {
     if(idBook.count(id) == 0)
     {
         cout << "Point id does not exist." << endl;
-        return Point2f(0.0, 0.0);
+        return Feature(KeyPoint({0.0, 0.0}, 1.f), -1);
     }
     return rightFeatureSet.getFeatureByIndex(idBook[id]);
 }
@@ -133,6 +146,7 @@ void View::setIdBook(const map<long, int> _idBook)
 {
     idBook = _idBook;
 }
+
 
 Mat View::getPose()
 {

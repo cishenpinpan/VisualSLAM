@@ -21,7 +21,6 @@ using namespace std;
 
 
 #define DATASET "KITTI"
-#define TRACK "00"
 #define MONOCULAR false
 
 int main( int argc, char** argv )

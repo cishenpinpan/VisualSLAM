@@ -21,6 +21,7 @@
 #include "FeatureExtractor.h"
 #include "Utility.h"
 #include "Canvas.h"
+#include "SystemParameters.h"
 #include "Converter.h"
 #include "g2o/core/sparse_optimizer.h"
 #include "g2o/core/block_solver.h"
@@ -48,14 +49,19 @@ public:
     void addView(View *v);
     vector<View*> getViews();
     void bundleAdjust();
-    void computeLandmarks();
+    void bundleAdjustMotionOnly();
+    void computeLandmarks(bool initial);
+    map<long, Landmark>& getLandmarkBook(){return landmarkBook;}
     View* getLastView();
+    View* getLastKeyView(){return keyViews.back();}
     View* popLastView();
+    void setKeyView(View *v);
 private:
     int nBundleAdjusted;
     FeatureTracker *featureTracker;
     FeatureExtractor *featureExtractor;
     vector<View*> views;
+    vector<View*> keyViews;
     map<long, View*> viewBook;
     map<long, Landmark> landmarkBook;
 };

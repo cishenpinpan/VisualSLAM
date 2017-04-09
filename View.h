@@ -34,6 +34,8 @@ public:
     FeatureSet& getRightFeatureSet();
     Feature getLeftFeatureById(long id);
     Feature getRightFeatureById(long id);
+    void removeLeftFeatureById(long id);
+    void removeRightFeatureById(long id);
     void setLeftFeatures(const FeatureSet _leftFeatureSet);
     void setRightFeatures(const FeatureSet _rightFeatureSet);
     map<long, int>& getIdBook();
@@ -48,8 +50,10 @@ public:
     Mat getRelativeT(View *v);
     void setGroundTruth(const Mat _gt);
     Mat getGroundTruth();
+    void setKeyView(){keyView = true;}
 private:
     long id;
+    bool keyView;
     Mat gt;
     vector<Mat> imgs;
     FeatureSet leftFeatureSet;

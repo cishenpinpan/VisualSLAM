@@ -18,44 +18,54 @@ using namespace cv;
 class Feature
 {
 private:
-    Point2f point2d;
+    KeyPoint point2d;
     long int id;
 public:
     Feature();
-    Feature(Point2f _point2d) : point2d(_point2d){id = -1;};
-    Feature(long int _id) : id(_id){point2d = {0.0, 0.0};};
-    Feature(Point2f _point2d, long _id) : point2d(_point2d), id(_id){};
-    Point2f getPoint(){return point2d;}
+    Feature(KeyPoint _point2d) : point2d(_point2d){id = -1;};
+    Feature(long int _id) : id(_id){point2d = KeyPoint({0.0, 0.0}, 1.f);};
+    Feature(KeyPoint _point2d, long _id) : point2d(_point2d), id(_id){};
+    KeyPoint getPoint(){return point2d;}
     long getId(){return id;}
 };
 
 class FeatureSet
 {
 private:
-    vector<Point2f> featurePoints;
+    vector<KeyPoint> featurePoints;
     vector<long int> ids;
 public:
     FeatureSet(){;};
-    FeatureSet(vector<Point2f> _featurePoints, vector<long int> _ids) : featurePoints(_featurePoints), ids(_ids){};
-    vector<Point2f>& getFeaturePoints(){return featurePoints;};
-    void setFeaturePoints(const vector<Point2f> _featurePoints){featurePoints = vector<Point2f>(_featurePoints);};
+    FeatureSet(vector<KeyPoint> _featurePoints, vector<long int> _ids) : featurePoints(_featurePoints), ids(_ids){};
+    vector<KeyPoint>& getFeaturePoints(){return featurePoints;};
+    void setFeaturePoints(const vector<KeyPoint> _featurePoints){featurePoints = vector<KeyPoint>(_featurePoints);};
     vector<long int>& getIds(){return ids;};
     void setIds(const vector<long int> _ids){ids = vector<long int>(_ids);};
     Feature getFeatureByIndex(int index){return Feature(featurePoints[index], ids[index]);}
+    Feature getFeatureById(long id);
     void addFeature(Feature feature);
-    void addFeature(Point2f, const long id);
+    void addFeature(KeyPoint, const long id);
+    void removeFeature(const long id);
     void clear();
     int size();
+    bool hasId(long id);
 };
 
 class Landmark
 {
-    public:
+public:
+    Landmark(const Landmark &l){point3d = Point3d(l.point3d); id = l.id; from = l.from; descriptor = l.descriptor.clone();}
+    Landmark(Point3d _point3d, long _id, pair<long, long> _from) : point3d(_point3d), id(_id), from(_from){};
+    Landmark(){point3d = Point3d(0, 0, 0); id = -1; from = {-1, -1};}
     Point3d point3d;
     long id;
-    Landmark(Point3d _point3d, long _id) : point3d(_point3d), id(_id){};
+    pair<long, long> from;
+    Mat descriptor;
+    
     Point3d getPoint(){return point3d;}
     void setPoint(const Point3d &_point3d){point3d = Point3d(_point3d);}
+    Mat getDescriptor(){return descriptor.clone();}
+    void setDescriptor(const Mat _descriptor){descriptor = _descriptor.clone();}
 };
 
 #endif /* Feature_h */

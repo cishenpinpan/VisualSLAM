@@ -22,35 +22,87 @@ void ViewTracker::addView(View *v)
 {
     views.push_back(v);
     viewBook[v->getId()] = v;
+    
 }
-void ViewTracker::computeLandmarks()
+void ViewTracker::setKeyView(View *v)
 {
-    // triangulate feature correspondences and update landmark book
-    // starting from second frame coming in
-    if(views.size() < 2)
-        return ;
-    View *prevView = views[views.size() - 2];
-    View *currView = views.back();
+    keyViews.push_back(v);
+    // when adding a new keyview, update landmarks
+    if(keyViews.size() > 1)
+    {
+        if(keyViews.size() == 2)
+            computeLandmarks(true);
+        else
+            computeLandmarks(false);
+    }
+    
+    
+}
+void ViewTracker::computeLandmarks(bool initial)
+{
+    // triangulate feature correspondences in keyframes and update landmark book
+    View *prevView = keyViews[keyViews.size() - 2];
+    View *currView = keyViews.back();
+    Canvas *canvas = new Canvas();
+    vector<long> idToRemovePrev, idToRemoveCurr;
+    vector<double> depths;
     for(int i = 0; i < currView->getLeftFeatureSet().size(); i++)
     {
         Feature currFeature = currView->getLeftFeatureSet().getFeatureByIndex(i);
         long int id = currFeature.getId();
-        if(!prevView->getIdBook().count(id))
+        if(!prevView->getLeftFeatureSet().hasId(id))
             continue;
-        int prevFeatureIndex = prevView->getIdBook()[id];
-        Feature prevFeature = prevView->getLeftFeatureSet().getFeatureByIndex(prevFeatureIndex);
+        Feature prevFeature = prevView->getLeftFeatureSet().getFeatureById(id);
         // triangulate this pair of points
         Point3d point3d;
+        
         triangulatePoint(prevView->getPose(), currView->getPose(),
                          prevFeature.getPoint(), currFeature.getPoint(), point3d);
+        Landmark *landmark = new Landmark(point3d, id, {prevView->getId(), currView->getId()});
+        // compute descriptor
+        Ptr<SURF> extractor = SURF::create();
+        Mat descriptor;
+        vector<KeyPoint> tmp;
+        tmp.push_back(currFeature.getPoint());
+        extractor->compute(currView->getImgs()[0], tmp, descriptor);
+        landmark->setDescriptor(descriptor);
         // reproject 3d point
-        pair<double, double> err = reproject3DPoint(point3d, prevView->getPose(), prevFeature.getPoint(), false);
         // add to landmark book if this feature is not yet triangulated
         if(!landmarkBook.count(id))
         {
-            landmarkBook.insert(make_pair(id, Landmark(point3d, id)));
+            pair<double, double> err = reproject3DPoint(point3d, prevView->getPose(), prevFeature.getPoint(), false);
+            pair<double, double> err2 = reproject3DPoint(point3d, currView->getPose(), currFeature.getPoint(), false);
+            double l2NormError = sqrt(err.first * err.first + err.second * err.second);
+            double l2NormError2 = sqrt(err2.first * err2.first + err2.second * err2.second);
+            if(l2NormError < REPROJECTION_THRESHOLD && l2NormError2 < REPROJECTION_THRESHOLD)
+            {
+                landmarkBook.insert(make_pair(id, *landmark));
+            }
+            else
+            {
+                idToRemovePrev.push_back(id);
+                idToRemoveCurr.push_back(id);
+            }
+        }
+        else
+        {
+            point3d = Point3d(landmarkBook[id].point3d);
+            pair<double, double> err = reproject3DPoint(point3d, currView->getPose(), currFeature.getPoint(), false);
+            double l2NormError = sqrt(err.first * err.first + err.second * err.second);
+//            if(l2NormError > REPROJECTION_THRESHOLD)
+//                idToRemoveCurr.push_back(id);
         }
     }
+    // remove
+    for(int i = 0; i < idToRemovePrev.size(); i++)
+    {
+        prevView->removeLeftFeatureById(idToRemovePrev[i]);
+    }
+    for(int i = 0; i < idToRemoveCurr.size(); i++)
+    {
+        currView->removeLeftFeatureById(idToRemoveCurr[i]);
+    }
+    
 }
 
 vector<View*> ViewTracker::getViews()
@@ -72,21 +124,8 @@ View* ViewTracker::popLastView()
 
 void ViewTracker::bundleAdjust()
 {
-    Canvas *canvas = new Canvas();
-    int c1 = 0, c2 = 5;
-    View *v1 = views[c1], *v2 = views[c2];
-    FeatureSet fs1 = v1->getLeftFeatureSet(), fs2 = v2->getLeftFeatureSet();
-    vector<Point2f> points1, points2;
-    for(int i = 0; i < fs2.size(); i++)
-    {
-        Feature f2 = fs2.getFeatureByIndex(i);
-        Feature f1 = fs1.getFeatureByIndex(v1->getIdBook()[f2.getId()]);
-        points1.push_back(f1.getPoint());
-        points2.push_back(f2.getPoint());
-    }
-    
-//    canvas->drawFeatureMatches(v1->getImgs()[0], v2->getImgs()[0],
-//                               points1, points2);
+    if(keyViews.size() < BUNDLE_ADJUSTMENT_LENGTH)
+        return ;
     
     // setting up g2o solver
     g2o::SparseOptimizer optimizer;
@@ -108,18 +147,19 @@ void ViewTracker::bundleAdjust()
     }
     
     // setting up camera poses as vertices
+    int start = int(keyViews.size()) - BUNDLE_ADJUSTMENT_LENGTH;
     vector<g2o::SE3Quat, aligned_allocator<g2o::SE3Quat> > truePoses;
-    for (int i = 0; i < views.size(); i++)
+    for (int i = start; i < keyViews.size(); i++)
     {
-        Mat pose = views[i]->getPose();
+        Mat pose = keyViews[i]->getPose();
         pose = pose.inv();
         Vector3d t(pose.at<double>(0, 3), pose.at<double>(1, 3), pose.at<double>(2, 3));
         vector<double> quat = rot2quat(pose(Rect(0, 0, 3, 3)));
         Quaterniond q = Quaterniond(quat[0], quat[1], quat[2], quat[3]);
         g2o::SE3Quat g2oPose(q,t);
         g2o::VertexSE3Expmap * v_se3 = new g2o::VertexSE3Expmap();
-        v_se3->setId(int(views[i]->getId()));
-        if(i < 1)
+        v_se3->setId(int(keyViews[i]->getId()));
+        if(i == start)
         {
             v_se3->setFixed(true);
         }
@@ -129,6 +169,10 @@ void ViewTracker::bundleAdjust()
     }
     
     // setting up landmarks as vertices
+    Canvas *canvas = new Canvas();
+    const float thHuber = sqrt(5.991);
+    vector<int> counts(BUNDLE_ADJUSTMENT_LENGTH, 0);
+    vector<double> errors(BUNDLE_ADJUSTMENT_LENGTH, 0.0);
     for (map<long, Landmark>::iterator landmarkIter = landmarkBook.begin();
                         landmarkIter != landmarkBook.end(); landmarkIter++)
     {
@@ -140,28 +184,48 @@ void ViewTracker::bundleAdjust()
         v_p->setMarginalized(true);
         v_p->setEstimate(point3d);
         optimizer.addVertex(v_p);
-        for (int j = 0; j < views.size(); j++)
+        for (int j = start; j < keyViews.size(); j++)
         {
+            
             // Add edges. See the following passage.
-            if(!views[j]->getIdBook().count(id))
+            if(!keyViews[j]->getLeftFeatureSet().hasId(id))
                 continue;
-            int featureIndex =  views[j]->getIdBook()[id];
-            Feature feature = views[j]->getLeftFeatureSet().getFeatureByIndex(featureIndex);
+            Feature feature = keyViews[j]->getLeftFeatureSet().getFeatureById(id);
             pair<double, double> err = reproject3DPoint(Point3d(point3d.x(), point3d.y(), point3d.z()),
-                                                        views[j]->getPose(), feature.getPoint(), false);
-            cout << "view(" << j << ")" << endl;
-            cout << "(" << err.first << ", " << err.second << ")" << endl;
-            Vector2d z = Vector2d(feature.getPoint().x, 376 - feature.getPoint().y);
+                                                        keyViews[j]->getPose(), feature.getPoint(), false);
+            double l2NormError = sqrt(err.first * err.first + err.second * err.second);
+            View *vFrom1 = viewBook[landmark.from.first], *vFrom2 = viewBook[landmark.from.second];
+            // plot matches
+            Vector2d z = Vector2d(feature.getPoint().pt.x, 376 - feature.getPoint().pt.y);
             g2o::EdgeProjectXYZ2UV * e = new g2o::EdgeProjectXYZ2UV();
             e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(v_p));
             e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>
-                         (optimizer.vertices().find(int(views[j]->getId()))->second));
+                         (optimizer.vertices().find(int(keyViews[j]->getId()))->second));
             e->setMeasurement(z);
             e->information() = Matrix2d::Identity();
             e->setParameterId(0, 0);
+            g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+            e->setRobustKernel(rk);
+            rk->setDelta(thHuber);
             optimizer.addEdge(e);
+            counts[j - start]++;
+            errors[j - start] += l2NormError;
+            
+            // draw matches
+            if(l2NormError > 2)
+            {
+                vector<Point2f> p1, p2;
+                KeyPoint::convert({vFrom1->getLeftFeatureSet().getFeatureById(id).getPoint()}, p1);
+                KeyPoint::convert({vFrom2->getLeftFeatureSet().getFeatureById(id).getPoint()}, p2);
+            }
+            
         }
     }
+//    for (int j = start; j < keyViews.size(); j++)
+//    {
+//        cout << "Frame (" << keyViews[j]->getId() << "): " << counts[j - start] << "--> " <<
+//                errors[j - start] / counts[j - start] << endl;
+//    }
     optimizer.setVerbose(false);
     optimizer.save("/Users/orangechicken/Desktop/SLAM/g2o_data/firstInput.g2o");
     
@@ -176,16 +240,26 @@ void ViewTracker::bundleAdjust()
     
     // update 3d landmarks and poses of views
     // views
-    for(int i = 0; i < views.size(); i++)
+    for(int i = start; i < keyViews.size(); i++)
     {
-        long id = views[i]->getId();
+        long id = keyViews[i]->getId();
         g2o::HyperGraph::VertexIDMap::iterator it = optimizer.vertices().find(int(id));
         if(it == optimizer.vertices().end())
             continue;
         g2o::VertexSE3Expmap *v_se3 = dynamic_cast<g2o::VertexSE3Expmap*>(it->second);
         g2o::SE3Quat se3quat = v_se3->estimate();
         Matrix<double, 4, 4> pose = se3quat.to_homogeneous_matrix();
-        views[i]->setPose(Converter::eigenMatToCvMat(pose).inv());
+        // reject large motion
+        Mat currPose = keyViews[i]->getPose(), estimatedPose = Converter::eigenMatToCvMat(pose).inv();
+        double xDiff = abs(currPose.at<double>(0, 3) - estimatedPose.at<double>(0, 3));
+        double yDiff = abs(currPose.at<double>(1, 3) - estimatedPose.at<double>(1, 3));
+        double zDiff = abs(currPose.at<double>(2, 3) - estimatedPose.at<double>(2, 3));
+        
+        if(xDiff > 1 || yDiff > 1 || zDiff > 1)
+        {
+            continue;
+        }
+        keyViews[i]->setPose(estimatedPose);
     }
     // landmarks
     for(map<long, Landmark>::iterator landmarkIter = landmarkBook.begin();
@@ -196,13 +270,18 @@ void ViewTracker::bundleAdjust()
         if(it == optimizer.vertices().end())
             continue;
         g2o::VertexSBAPointXYZ *v_p = dynamic_cast<g2o::VertexSBAPointXYZ*>(it->second);
-        Vector3d point3d = v_p->estimate();
-        landmarkIter->second.setPoint(Converter::vector3dToPoint3d(point3d));
+        Point3d currPoint3d = landmarkIter->second.getPoint(),
+                estimatedPoint3d = Converter::vector3dToPoint3d(v_p->estimate());
+        double xDiff = abs(currPoint3d.x - estimatedPoint3d.x);
+        double yDiff = abs(currPoint3d.y - estimatedPoint3d.y);
+        double zDiff = abs(currPoint3d.z - estimatedPoint3d.z);
+        if(xDiff > 1 || yDiff > 1 || zDiff > 1)
+        {
+            continue;
+        }
+        landmarkIter->second.setPoint(estimatedPoint3d);
     }
     
     // update nBundleAdjust
-    nBundleAdjusted = int(views.size());
+    nBundleAdjusted = int(keyViews.size());
 }
-
-
-

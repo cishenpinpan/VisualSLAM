@@ -10,7 +10,7 @@
 
 IdGenerator* IdGenerator::instance = NULL;
 
-void triangulatePoint(const Mat pose1, const Mat pose2, const Point2d point1, const Point2d point2, Point3d& point3d)
+void triangulatePoint(const Mat pose1, const Mat pose2, const KeyPoint point1, const KeyPoint point2, Point3d& point3d)
 {
     const Mat globalR = pose1(Rect(0, 0, 3, 3));
     const Mat globalT = pose1(Rect(3, 0, 1, 3));
@@ -20,11 +20,11 @@ void triangulatePoint(const Mat pose1, const Mat pose2, const Point2d point1, co
     const Mat invK = CameraParameters::getIntrinsic().inv();
     
     Mat homo1(3, 1, CV_64F), homo2(3, 1, CV_64F);
-    homo1.at<double>(0, 0) = point1.x;
-    homo1.at<double>(1, 0) = point1.y;
+    homo1.at<double>(0, 0) = point1.pt.x;
+    homo1.at<double>(1, 0) = point1.pt.y;
     homo1.at<double>(2, 0) = 1.0;
-    homo2.at<double>(0, 0) = point2.x;
-    homo2.at<double>(1, 0) = point2.y;
+    homo2.at<double>(0, 0) = point2.pt.x;
+    homo2.at<double>(1, 0) = point2.pt.y;
     homo2.at<double>(2, 0) = 1.0;
     homo1 = invK * homo1;
     homo2 = invK * homo2;
@@ -172,41 +172,27 @@ vector<double> rot2quat(const Mat R)
     return {qw, qx, qy, qz};
 }
 
-pair<double, double> reproject3DPoint(Point3d point3d, Mat pose, Point2f point2d, bool L2Norm)
+pair<double, double> reproject3DPoint(Point3d point3d, Mat pose, KeyPoint point2d, bool L2Norm)
 {
     Mat R = pose(Rect(0, 0, 3, 3)).clone();
     Mat T = pose(Rect(3, 0, 1, 3)).clone();
-//    R = Mat::eye(3, 3, CV_64F);
-//    R.at<double>(0, 1) = -.0026;
-//    R.at<double>(0, 2) = -.0035;
-//    R.at<double>(1, 0) = .0026;
-//    R.at<double>(1, 2) = -.0022;
-//    R.at<double>(2, 0) = .0035;
-//    R.at<double>(2, 1) = .0022;
     Mat gammaW = Mat(point3d);
     Mat gammaC = R.inv() * (gammaW - T);
     Mat homoC = gammaC / gammaC.at<double>(2, 0);
     Mat pixelC = CameraParameters::getIntrinsic() * homoC;
     pair<double, double> error = {0.0, 0.0};
+    
     if(L2Norm)
     {
-        error.first = (point2d.x - pixelC.at<double>(0, 0)) * (point2d.x - pixelC.at<double>(0, 0));
-        error.second = (point2d.y - pixelC.at<double>(1, 0)) * (point2d.y - pixelC.at<double>(1, 0));
+        error.first = (point2d.pt.x - pixelC.at<double>(0, 0)) * (point2d.pt.x - pixelC.at<double>(0, 0));
+        error.second = (point2d.pt.y - pixelC.at<double>(1, 0)) * (point2d.pt.y - pixelC.at<double>(1, 0));
 
     }
     else
     {
-        error.first = point2d.x - pixelC.at<double>(0, 0);
-        error.second = point2d.y - pixelC.at<double>(1, 0);
+        error.first = point2d.pt.x - pixelC.at<double>(0, 0);
+        error.second = point2d.pt.y - pixelC.at<double>(1, 0);
     }
-//    R.deallocate();
-//    T.deallocate();
-//    gammaW.deallocate();
-//    gammaC.deallocate();
-//    homoC.deallocate();
-//    pixelC.deallocate();
-//    cout << "(" << error.first << ", " << error.second << ")";
-//    cout << endl;
     return error;
 }
 double projectEpipolarLine(const Mat E, Point2f point1, Point2f point2)
@@ -218,15 +204,15 @@ double projectEpipolarLine(const Mat E, Point2f point1, Point2f point2)
     pixel2.at<double>(0, 0) = point2.x;
     pixel2.at<double>(1, 0) = point2.y;
     pixel2.at<double>(2, 0) = 1;
-    
-    Mat homo1 = CameraParameters::getIntrinsic().inv() * pixel1,
-    homo2 = CameraParameters::getIntrinsic().inv() * pixel2;
-    transpose(homo2, homo2);
-    transpose(pixel2, pixel2);
-    Mat res = (homo2 * E * homo1);
-    return res.at<double>(0, 0);
+    Mat F = CameraParameters::getIntrinsic().inv().t() * E * CameraParameters::getIntrinsic().inv();
+    Mat line = F * pixel2;
+    double A = line.at<double>(0, 0);
+    double B = line.at<double>(1, 0);
+    double C = line.at<double>(2, 0);
+    double dist = (A * point1.x + B * point1.y + C) / sqrt(A * A + B * B);
+    return dist;
 }
-double reproject3DPoints(vector<Point3d> points3D, Mat pose, vector<Point2f> points2D)
+double reproject3DPoints(vector<Point3d> points3D, Mat pose, vector<KeyPoint> points2D)
 {
     double totalError = 0.0;
     for(int i = 0; i < points3D.size(); i++)
@@ -251,4 +237,36 @@ Mat getEssentialMatrix(const Mat _R, const Mat _t)
     tx.at<double>(2, 1) = t.at<double>(0, 0);
     Mat E = tx * R;
     return E.clone();
+}
+
+Mat anglesToRotationMatrix(const Mat &theta)
+{
+    // Calculate rotation about x axis
+    double thetaX = theta.at<double>(0, 0);
+    double thetaY = theta.at<double>(1, 0);
+    double thetaZ = theta.at<double>(2, 0);
+    Mat R_x = (Mat_<double>(3,3) <<
+               1,       0,              0,
+               0,       cos(thetaX),   -sin(thetaX),
+               0,       sin(thetaX),   cos(thetaX)
+               );
+    
+    // Calculate rotation about y axis
+    Mat R_y = (Mat_<double>(3,3) <<
+               cos(thetaY),    0,      sin(thetaY),
+               0,               1,      0,
+               -sin(thetaY),   0,      cos(thetaY)
+               );
+    
+    // Calculate rotation about z axis
+    Mat R_z = (Mat_<double>(3,3) <<
+               cos(thetaZ),    -sin(thetaZ),      0,
+               sin(thetaZ),    cos(thetaZ),       0,
+               0,               0,                  1);
+    
+    
+    // Combined rotation matrix
+    Mat R = R_z * R_y * R_x;
+    
+    return R.clone();
 }

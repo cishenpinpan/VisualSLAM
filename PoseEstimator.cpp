@@ -53,7 +53,7 @@ void evaluateReprojectionError(const double *par, const int nEqs, const void *da
 
     Mat nextLeftPose = v1->getPose() * poseChange.clone();
     Mat nextRightPose = nextLeftPose * CameraParameters::getStereoPose();
-    vector<Point2f> nextLeftFeatures = v2->getLeftFeatureSet().getFeaturePoints(),
+    vector<KeyPoint> nextLeftFeatures = v2->getLeftFeatureSet().getFeaturePoints(),
                     nextRightFeatures = v2->getRightFeatureSet().getFeaturePoints();
     // go through each point
     double error = 0.0;
@@ -210,36 +210,44 @@ Mat PoseEstimator::estimatePose(View *v1, View *v2)
 
 Mat PoseEstimator::estimatePoseMono(View *v1, View *v2)
 {
-    // 1. assume v1 has feature extracted but not v2
+    // 1. assume features are matched
     
-    // 2. track to left image of view 2
-    Mat featureTrackingStat = featureTracker->track(v1->getImgs()[0], v2->getImgs()[0],
-                                        v1->getLeftFeatureSet(),v2->getLeftFeatureSet(), false);
-    // reject outliers
-    rejectOutliers(v1, v2, featureTrackingStat);
-    
-    // 3. estimate essential matrix
+    // 2. estimate essential matrix
     Mat essentialMatrixStat;
     
-    Mat E = findEssentialMat(v2->getLeftFeatureSet().getFeaturePoints(), v1->getLeftFeatureSet().getFeaturePoints(),
+    vector<Point2f> points1, points2;
+    KeyPoint::convert(v1->getLeftFeatureSet().getFeaturePoints(), points1);
+    KeyPoint::convert(v2->getLeftFeatureSet().getFeaturePoints(), points2);
+    Mat E = findEssentialMat(points2, points1,
                         CameraParameters::focal, CameraParameters::principal, RANSAC, 0.999, 1.0, essentialMatrixStat);
     // reject outliers
     rejectOutliers(v1, v2, essentialMatrixStat);
 
     // cout << "essential matrix inliers: " << count << "/" << points1.size() << endl;
     
-    // 4. recorver pose (translation up to a scale)
+    // 3. recorver pose (translation up to a scale)
     Mat poseRecoveryStat;
     Mat R, t;
-    recoverPose(E, v2->getLeftFeatureSet().getFeaturePoints(), v1->getLeftFeatureSet().getFeaturePoints(), R, t,
+    KeyPoint::convert(v1->getLeftFeatureSet().getFeaturePoints(), points1);
+    KeyPoint::convert(v2->getLeftFeatureSet().getFeaturePoints(), points2);
+    recoverPose(E, points2, points1, R, t,
                 CameraParameters::focal, CameraParameters::principal, poseRecoveryStat);
     
+    for(int i = 0 ; i < points1.size(); i++)
+    {
+        double distToEpipolarLine = projectEpipolarLine(E, points1[i], points2[i]);
+        
+        if(poseRecoveryStat.at<bool>(i, 0) == 0 && abs(distToEpipolarLine) >= 1)
+        {
+            poseRecoveryStat.at<bool>(i, 0) = 0;
+        }
+    }
     // reject outliers
     rejectOutliers(v1, v2, poseRecoveryStat);
     
     // cout << "recovering pose inliers: " << count << "/" << points1.size()<< endl;
     
-    // 6. estimate scale (later)
+    // 4. estimate scale (later)
     Mat poseChange = Mat::eye(4, 4, CV_64F);
     Mat aux = poseChange(Rect(0, 0, 3, 3));
     R.copyTo(aux);
@@ -247,17 +255,175 @@ Mat PoseEstimator::estimatePoseMono(View *v1, View *v2)
     t.copyTo(aux);
     v2->setPose(v1->getPose() * poseChange);
     
+    
     // 7. return pose
     return poseChange.clone();
 }
+Mat PoseEstimator::solvePnP(View *v, map<long, Landmark> &landmarkBook)
+{
+    vector<Point3d> landmarks;
+    vector<Point2f> imagePoints;
+    const vector<long> ids = v->getLeftFeatureSet().getIds();
+    KeyPoint::convert(v->getLeftFeatureSet().getFeaturePoints(), imagePoints);
+    for(int i = 0; i < imagePoints.size(); i++)
+    {
+        // imagePoints[i].y = 376 - imagePoints[i].y;
+    }
+    for(long id : ids)
+    {
+        landmarks.push_back(landmarkBook[id].getPoint());
+    }
+    const Mat cameraMatrix = CameraParameters::getIntrinsic();
+    const Mat distCoeffs = CameraParameters::getDistCoeff();
+    Mat R, Rvec, t;
+    Mat status;
+    solvePnPRansac(landmarks, imagePoints, cameraMatrix, distCoeffs, Rvec, t, false, 100, 5.0, 0.99, status, CV_EPNP);
+    Rodrigues(Rvec, R);
+    Mat pose = Mat::eye(4, 4, CV_64F);
+    Mat aux = pose(Rect(0, 0, 3, 3));
+    R.copyTo(aux);
+    aux = pose(Rect(3, 0, 1, 3));
+    t.copyTo(aux);
+    pose = pose.inv();
+    return pose.clone();
+}
+Mat PoseEstimator::estimatePoseMotionOnlyBA(View *v1, View *v2, map<long, Landmark> landmarkBook)
+{
+    // setting up g2o solver
+    g2o::SparseOptimizer optimizer;
+    optimizer.setVerbose(false);
+    g2o::BlockSolver_6_3::LinearSolverType * linearSolver =
+    new g2o::LinearSolverCholmod<g2o::BlockSolver_6_3::PoseMatrixType>();
+    g2o::BlockSolver_6_3 * solver_ptr = new g2o::BlockSolver_6_3(linearSolver);
+    g2o::OptimizationAlgorithmLevenberg* solver = new g2o::OptimizationAlgorithmLevenberg(solver_ptr);
+    optimizer.setAlgorithm(solver);
+    
+    // setting up camer parameters
+    double focalLength = CameraParameters::focal;
+    Vector2d principalPoint(CameraParameters::principal.x, CameraParameters::principal.y);
+    vector<g2o::SE3Quat, aligned_allocator<g2o::SE3Quat> > true_poses;
+    g2o::CameraParameters * camParams = new g2o::CameraParameters (focalLength, principalPoint, 0.);
+    camParams->setId(0);
+    if (!optimizer.addParameter(camParams)) {
+        assert(false);
+    }
+    
+    // setting up camera poses as vertices
+    vector<g2o::SE3Quat, aligned_allocator<g2o::SE3Quat> > truePoses;
+    Mat pose = v1->getPose();
+    pose = pose.inv();
+    Vector3d t(pose.at<double>(0, 3), pose.at<double>(1, 3), pose.at<double>(2, 3));
+    vector<double> quat = rot2quat(pose(Rect(0, 0, 3, 3)));
+    Quaterniond q = Quaterniond(quat[0], quat[1], quat[2], quat[3]);
+    g2o::SE3Quat g2oPose(q,t);
+    g2o::VertexSE3Expmap * v_se3 = new g2o::VertexSE3Expmap();
+    v_se3->setId(int(v1->getId()));
+    v_se3->setFixed(true);
+    v_se3->setEstimate(g2oPose);
+    optimizer.addVertex(v_se3);
+    
+    // v2
+    pose = v2->getPose();
+    pose = pose.inv();
+    t = Vector3d(pose.at<double>(0, 3), pose.at<double>(1, 3), pose.at<double>(2, 3));
+    quat = rot2quat(pose(Rect(0, 0, 3, 3)));
+    q = Quaterniond(quat[0], quat[1], quat[2], quat[3]);
+    g2oPose = g2o::SE3Quat(q,t);
+    v_se3 = new g2o::VertexSE3Expmap();
+    v_se3->setId(int(v2->getId()));
+    v_se3->setEstimate(g2oPose);
+    optimizer.addVertex(v_se3);
+    
+    // setting up landmarks as vertices
+    Canvas *canvas = new Canvas();
+    const float thHuber = sqrt(5.991);
+    for (map<long, Landmark>::iterator landmarkIter = landmarkBook.begin();
+         landmarkIter != landmarkBook.end(); landmarkIter++)
+    {
+        long id = landmarkIter->first;
+        Landmark landmark = landmarkIter->second;
+        Vector3d point3d = Vector3d(landmark.point3d.x, landmark.point3d.y, landmark.point3d.z);
+        g2o::VertexSBAPointXYZ * v_p = new g2o::VertexSBAPointXYZ();
+        v_p->setId(int(id));
+        v_p->setMarginalized(true);
+        v_p->setEstimate(point3d);
+        // motion only BA: not updating landmarks
+        v_p->setFixed(true);
+        optimizer.addVertex(v_p);
+        
+        // v1
+        if(v1->getIdBook().count(id))
+        {
+            Feature feature = v1->getLeftFeatureSet().getFeatureById(id);
+            Vector2d z = Vector2d(feature.getPoint().pt.x, 376 - feature.getPoint().pt.y);
+            g2o::EdgeProjectXYZ2UV * e = new g2o::EdgeProjectXYZ2UV();
+            e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(v_p));
+            e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>
+                         (optimizer.vertices().find(int(v1->getId()))->second));
+            e->setMeasurement(z);
+            e->information() = Matrix2d::Identity();
+            e->setParameterId(0, 0);
+            g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+            e->setRobustKernel(rk);
+            rk->setDelta(thHuber);
+            optimizer.addEdge(e);
 
+        }
+        
+        // v2
+        if(v2->getIdBook().count(id))
+        {
+            Feature feature = v2->getLeftFeatureSet().getFeatureById(id);
+            Vector2d z = Vector2d(feature.getPoint().pt.x, 376 - feature.getPoint().pt.y);
+            g2o::EdgeProjectXYZ2UV * e = new g2o::EdgeProjectXYZ2UV();
+            e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(v_p));
+            e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>
+                         (optimizer.vertices().find(int(v2->getId()))->second));
+            e->setMeasurement(z);
+            e->information() = Matrix2d::Identity();
+            e->setParameterId(0, 0);
+            g2o::RobustKernelHuber* rk = new g2o::RobustKernelHuber;
+            e->setRobustKernel(rk);
+            rk->setDelta(thHuber);
+            optimizer.addEdge(e);
+            
+        }
+    }
+    
+    optimizer.setVerbose(false);
+    optimizer.save("/Users/orangechicken/Desktop/SLAM/g2o_data/firstInput.g2o");
+    
+    // start optimization
+    optimizer.initializeOptimization();
+    cout << "Performing motion only BA:" << endl;
+    optimizer.optimize(10);
+    
+    // save result
+    optimizer.save("/Users/orangechicken/Desktop/SLAM/g2o_data/firstOutput.g2o");
+    cout << "BA Finished" << endl;
+    
+    // update view2
+    long id = v2->getId();
+    g2o::HyperGraph::VertexIDMap::iterator it = optimizer.vertices().find(int(id));
+        if(it != optimizer.vertices().end())
+    {
+        g2o::VertexSE3Expmap *v_se3 = dynamic_cast<g2o::VertexSE3Expmap*>(it->second);
+        g2o::SE3Quat se3quat = v_se3->estimate();
+        Matrix<double, 4, 4> pose = se3quat.to_homogeneous_matrix();
+        Mat estimatedPose = Converter::eigenMatToCvMat(pose).inv();
+        v2->setPose(estimatedPose);
+    }
+   
+    // return pose change
+    Mat poseChange = v1->getPose().inv() * v2->getPose();
+    return poseChange.clone();
+}
 void PoseEstimator::rejectOutliers(View *v1, View *v2, Mat status)
 {
     map<int, int> fids;
-    vector<Point2f> points1, points2;
+    vector<KeyPoint> points1, points2;
     vector<long> ids1, ids2;
     map<long ,int> idBook1, idBook2;
-    
     for(int i = 0 ; i < status.rows; i++)
     {
         if(status.at<bool>(i, 0) == 1)

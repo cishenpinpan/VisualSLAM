@@ -10,6 +10,7 @@
 
 double CameraParameters::focal = 718.8650;
 Point2d CameraParameters::principal = Point2d(607.1928, 185.2157);
+vector<float> CameraParameters::distCoeff = {0.0, 0.0, 0.0, 0.0, 0.0};
 Mat CameraParameters::getIntrinsic()
 {
     Mat intrinsic = Mat::eye(3, 3, CV_64F);
@@ -25,4 +26,12 @@ Mat CameraParameters::getStereoPose()
     Mat stereoPose = Mat::eye(4, 4, CV_64F);
     stereoPose.at<double>(0, 3) = 0.537;
     return stereoPose.clone();
+}
+
+Mat CameraParameters::getDistCoeff()
+{
+    Mat distCoeffMat(5, 1, CV_64F);
+    for(int i = 0; i < 5; i++)
+        distCoeffMat.at<double>(i, 0) = distCoeff[i];
+    return distCoeffMat.clone();
 }

@@ -18,17 +18,32 @@
 #include "opencv2/calib3d/calib3d_c.h"
 #include "opencv2/plot.hpp"
 #include "opencv2/highgui/highgui.hpp"
+#include "g2o/core/sparse_optimizer.h"
+#include "g2o/core/block_solver.h"
+#include "g2o/core/solver.h"
+#include "g2o/core/robust_kernel_impl.h"
+#include "g2o/core/optimization_algorithm_levenberg.h"
+#include "g2o/solvers/cholmod/linear_solver_cholmod.h"
+#include "g2o/solvers/dense/linear_solver_dense.h"
+#include "g2o/types/sba/types_six_dof_expmap.h"
+//#include "g2o/math_groups/se3quat.h"
+#include "g2o/solvers/structure_only/structure_only_solver.h"
+#include "g2o/types/slam3d/vertex_se3.h"
+#include "g2o/types/slam3d/edge_se3.h"
 #include "View.h"
 #include "CameraParameters.h"
 #include "FeatureTracker.h"
 #include "FeatureExtractor.h"
 #include "Utility.h"
 #include "Canvas.h"
+#include "Converter.h"
+#include "SystemParameters.h"
 #include <cvsba/cvsba.h>
 #include <set>
 
 using namespace std;
 using namespace cv;
+using namespace Eigen;
 
 struct DataStruct
 {
@@ -54,6 +69,8 @@ public:
     PoseEstimator();
     Mat estimatePose(View *v1, View *v2);
     double estimateScale(View *v1, View *v2);
+    Mat estimatePoseMotionOnlyBA(View *v1, View *v2, map<long, Landmark> landmarkBook);
+    Mat solvePnP(View *v, map<long, Landmark> &landmarkBook);
 private:
     Mat estimatePoseMono(View *v1, View *v2);
     FeatureExtractor *featureExtractor;

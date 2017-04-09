@@ -27,7 +27,7 @@
 using namespace std;
 using namespace cv;
 
-void triangulatePoint(const Mat pose1, const Mat pose2, const Point2d point1, const Point2d point2, Point3d& point3d);
+void triangulatePoint(const Mat pose1, const Mat pose2, const KeyPoint point1, const KeyPoint point2, Point3d& point3d);
 
 void triangulatePoints(Mat globalPose, Mat relativePose, vector<Point2d> points1,
                        vector<Point2d> points2, vector<Point3d> &points3D);
@@ -37,7 +37,9 @@ void triangulatePoints(Mat globalPose, Mat relativePose, vector<Point2f> points1
 
 vector<double> rot2quat(const Mat R);
 
-pair<double, double> reproject3DPoint(Point3d point3d, Mat pose, Point2f point2d, bool L2Norm);
+Mat anglesToRotationMatrix(const Mat &theta);
+
+pair<double, double> reproject3DPoint(Point3d point3d, Mat pose, KeyPoint point2d, bool L2Norm);
 double reproject3DPoints(vector<Point3d> points3D, Mat pose, vector<Point2f> points2D);
 Mat getEssentialMatrix(const Mat R, const Mat t);
 double projectEpipolarLine(const Mat E, Point2f pixel1, Point2f pixel2);
