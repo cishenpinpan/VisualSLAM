@@ -21,7 +21,7 @@
 #include "FeatureTracker.h"
 #include "FeatureExtractor.h"
 #include "Canvas.h"
-#include <cvsba/cvsba.h>
+//#include <cvsba/cvsba.h>
 #include <set>
 
 using namespace std;

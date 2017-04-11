@@ -36,7 +36,7 @@
 
 #include "g2o/types/slam3d/vertex_se3.h"
 #include "g2o/types/slam3d/edge_se3.h"
-#include <cvsba/cvsba.h>
+//#include <cvsba/cvsba.h>
 #include <set>
 
 using namespace Eigen;

@@ -38,7 +38,7 @@
 #include "Canvas.h"
 #include "Converter.h"
 #include "SystemParameters.h"
-#include <cvsba/cvsba.h>
+//#include <cvsba/cvsba.h>
 #include <set>
 
 using namespace std;
