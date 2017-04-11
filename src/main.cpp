@@ -11,7 +11,7 @@
 #include "opencv2/calib3d/calib3d_c.h"
 #include "opencv2/plot.hpp"
 
-//#include <cvsba/cvsba.h>
+#include <cvsba/cvsba.h>
 
 #include <fstream>
 #include <list>

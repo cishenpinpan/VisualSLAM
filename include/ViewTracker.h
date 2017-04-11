@@ -36,10 +36,12 @@
 
 #include "g2o/types/slam3d/vertex_se3.h"
 #include "g2o/types/slam3d/edge_se3.h"
-//#include <cvsba/cvsba.h>
+#include <cvsba/cvsba.h>
 #include <set>
 
 using namespace Eigen;
+
+
 
 class ViewTracker
 {
@@ -48,12 +50,13 @@ public:
     ~ViewTracker();
     void addView(View *v);
     vector<View*> getViews();
-    void bundleAdjust();
+    void bundleAdjust(int option, bool keyview);
     void bundleAdjustMotionOnly();
     void computeLandmarks(bool initial);
     map<long, Landmark>& getLandmarkBook(){return landmarkBook;}
     View* getLastView();
     View* getLastKeyView(){return keyViews.back();}
+    vector<View*> getLastTwoKeyViews(){return {keyViews[keyViews.size() - 2], keyViews.back()};}
     View* popLastView();
     void setKeyView(View *v);
 private:

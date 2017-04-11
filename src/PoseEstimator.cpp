@@ -197,12 +197,152 @@ double PoseEstimator::estimateScale(View *v1, View *v2)
     
      control.verbosity = 0;
     
-//    lmmin(const int n_par, <#double *par#>, <#const int m_dat#>, <#const void *data#>, void (*evaluate)(const double *, const int, const void *, double *, int *), <#const lm_control_struct *control#>, lm_status_struct *status)
+//    lmmin(const int n_par, <#double *par#>, const int m_dat, <#const void *data#>, void (*evaluate)(const double *, const int, const void *, double *, int *), <#const lm_control_struct *control#>, lm_status_struct *status)
     lmmin(1, par, nEqs, &dataStruct, evaluateReprojectionError, &control, &status);
     
     return *par;
 }
+void computeReprojectionErrorByTrinocular
+        (const double *par, const int nEqs, const void *data, double *fvec, int *userBreak)
+{
+    // unpack initial guess (of the pose)
+    double r1 = par[0], r2 = par[1], r3 = par[2], t1 = par[3], t2 = par[4], t3 = par[5];
+    Mat rVec(3, 1, CV_64F), tVec(3, 1, CV_64F);
+    rVec.at<double>(0, 0) = r1;
+    rVec.at<double>(1, 0) = r2;
+    rVec.at<double>(2, 0) = r3;
+    tVec.at<double>(0, 0) = t1;
+    tVec.at<double>(1, 0) = t2;
+    tVec.at<double>(2, 0) = t3;
+    Mat R;
+    Rodrigues(rVec, R);
+    Mat t = tVec.clone();
+    Mat pose_v = Converter::rotationTranslationToPose(R, t);
+    // unpack data struct
+    TrinocularDataStruct *dataStruct = (TrinocularDataStruct*) data;
+    View *v1 = dataStruct->v1;
+    View *v2 = dataStruct->v2;
+    View *v = dataStruct->v;
+    map<long, vector<KeyPoint>> commonFeatures(dataStruct->commonFeatures);
+    
+    // compute essential matrices
+//    const Mat pose_v1v = v1->getPose().inv() * pose_v;
+//    const Mat pose_v2v = v2->getPose().inv() * pose_v;
+//    const Mat R_v1v = pose_v1v.rowRange(0, 3).colRange(0, 3).clone();
+//    const Mat R_v2v = pose_v2v.rowRange(0, 3).colRange(0, 3).clone();
+//    const Mat t_v1v = pose_v1v.rowRange(0, 3).col(3).clone();
+//    const Mat t_v2v = pose_v2v.rowRange(0, 3).col(3).clone();
+//    const Mat t_v1v_x = Converter::tVecToTx(t_v1v);
+//    const Mat t_v2v_x = Converter::tVecToTx(t_v2v);
+//    const Mat E_v1v = t_v1v_x * R_v1v;
+//    const Mat E_v2v = t_v2v_x * R_v2v;
+    
+    // double compute reprojection error
+    Mat pose_v1v = v1->getPose().inv() * pose_v;
+    Mat pose_v2v = v2->getPose().inv() * pose_v;
+    pose_v1v = pose_v1v.inv();
+    pose_v2v = pose_v2v.inv();
+    Mat R_v1v = pose_v1v.rowRange(0, 3).colRange(0, 3).clone();
+    Mat R_v2v = pose_v2v.rowRange(0, 3).colRange(0, 3).clone();
+    Mat t_v1v = pose_v1v.rowRange(0, 3).col(3).clone();
+    Mat t_v2v = pose_v2v.rowRange(0, 3).col(3).clone();
+    Mat t_v1v_x = Converter::tVecToTx(t_v1v);
+    Mat t_v2v_x = Converter::tVecToTx(t_v2v);
+    Mat E_v1v = t_v1v_x * R_v1v;
+    Mat E_v2v = t_v2v_x * R_v2v;
+    double totalError = 0.0;
+    int i = 0;
+    for(map<long, vector<KeyPoint>>::iterator it = commonFeatures.begin(); it != commonFeatures.end(); it++)
+    {
+        
+        KeyPoint kp_v1 = it->second[0], kp_v2 = it->second[1], kp_v = it->second[2];
+        Mat p_v1 = Mat::ones(3, 1, CV_64F), p_v2 = Mat::ones(3, 1, CV_64F), p_v = Mat::ones(3, 1, CV_64F);
+        p_v1.at<double>(0, 0) = kp_v1.pt.x;
+        p_v1.at<double>(1, 0) = kp_v1.pt.y;
+        p_v2.at<double>(0, 0) = kp_v2.pt.x;
+        p_v2.at<double>(1, 0) = kp_v2.pt.y;
+        p_v.at<double>(0, 0) = kp_v.pt.x;
+        p_v.at<double>(1, 0) = kp_v.pt.y;
+        p_v1 = CameraParameters::getIntrinsic().inv() * p_v1.clone();
+        p_v2 = CameraParameters::getIntrinsic().inv() * p_v2.clone();
+        p_v = CameraParameters::getIntrinsic().inv() * p_v.clone();
+        const double x = p_v.at<double>(0, 0), y = p_v.at<double>(1, 0);
+        const Mat epi_v1v = E_v1v * p_v1, epi_v2v = E_v2v * p_v2;
+        double a1 = epi_v1v.at<double>(0, 0), b1 = epi_v1v.at<double>(1, 0), c1 = epi_v1v.at<double>(2, 0);
+        double a2 = epi_v2v.at<double>(0, 0), b2 = epi_v2v.at<double>(1, 0), c2 = epi_v2v.at<double>(2, 0);
+        // compute intersection of two epipolar lines (reprojection point)
+        double x_hat = (b1 * c2 - b2 * c1) / (a1 * b2 - a2 * b1);
+        double y_hat = (a2 * c1 - a1 * c2) / (a1 * b2 - a2 * b1);
+        double err = (x - x_hat) * (x - x_hat) + (y - y_hat) * (y - y_hat);
+        totalError += err;
+        fvec[i++] = x - x_hat;
+        fvec[i++] = y - y_hat;
+        // cout << "err: ";
+        // cout << CameraParameters::focal * (x - x_hat) << ", " << CameraParameters::focal * (y - y_hat) << endl;
+    }
+    cout << "totalError: " << sqrt(totalError) << endl;
+}
+Mat PoseEstimator::estimatePoseByTrinocular(View *v1, View *v2, View *v)
+{
+    // find common feature points
+    map<long, vector<KeyPoint>> commonFeatures;
+    FeatureSet featureSet_v1 = v1->getLeftFeatureSet();
+    FeatureSet featureSet_v2 = v2->getLeftFeatureSet();
+    FeatureSet featureSet_v = v->getLeftFeatureSet();
+    for(int i = 0; i < featureSet_v1.size(); i++)
+    {
+        long id = featureSet_v1.getIds()[i];
+        commonFeatures[id].push_back(featureSet_v1.getFeaturePoints()[i]);
+    }
+    for(int i = 0; i < featureSet_v2.size(); i++)
+    {
+        long id = featureSet_v2.getIds()[i];
+        commonFeatures[id].push_back(featureSet_v2.getFeaturePoints()[i]);
+    }
+    for(int i = 0; i < featureSet_v.size(); i++)
+    {
+        long id = featureSet_v.getIds()[i];
+        commonFeatures[id].push_back(featureSet_v.getFeaturePoints()[i]);
+    }
+    // remove non-common feature points
+    for(map<long, vector<KeyPoint>>::iterator it = commonFeatures.begin(); it != commonFeatures.end(); )
+    {
+        if(it->second.size() < 3)
+            it = commonFeatures.erase(it);
+        else
+            it++;
+    }
+    // 6 DoF
+    double lambda[6] = {0.0, 0.0, 0.0, 0.0, 0.0, 1.0};
+    
+    double *par = lambda;
 
+    TrinocularDataStruct dataStruct(v1, v2, v, commonFeatures);
+    const int nEqs = int(commonFeatures.size()) * 2;
+    // 2. nonlinear optimization (levenburg marquardt)
+    /* auxiliary parameters */
+    lm_control_struct control = lm_control_double;
+    lm_status_struct  status;
+    
+    control.verbosity = 0;
+    
+    //    lmmin(const int n_par, <#double *par#>, <#const int m_dat#>, <#const void *data#>, void (*evaluate)(const double *, const int, const void *, double *, int *), <#const lm_control_struct *control#>, lm_status_struct *status)
+    lmmin(6, par, nEqs, &dataStruct, computeReprojectionErrorByTrinocular, &control, &status);
+    
+    // re-construct pose
+    Mat rVec = Mat::zeros(3, 1, CV_64F), t = Mat::zeros(3, 1, CV_64F);
+    rVec.at<double>(0, 0) = par[0];
+    rVec.at<double>(1, 0) = par[1];
+    rVec.at<double>(2, 0) = par[2];
+    Mat R;
+    Rodrigues(rVec, R);
+    t.at<double>(0, 0) = par[3];
+    t.at<double>(1, 0) = par[4];
+    t.at<double>(2, 0) = par[5];
+    Mat pose = Converter::rotationTranslationToPose(R, t);
+    v->setPose(pose);
+    return pose.clone();
+}
 Mat PoseEstimator::estimatePose(View *v1, View *v2)
 {
     return estimatePoseMono(v1, v2);
@@ -237,7 +377,7 @@ Mat PoseEstimator::estimatePoseMono(View *v1, View *v2)
     {
         double distToEpipolarLine = projectEpipolarLine(E, points1[i], points2[i]);
         
-        if(poseRecoveryStat.at<bool>(i, 0) == 0 && abs(distToEpipolarLine) >= 1)
+        if(poseRecoveryStat.at<bool>(i, 0) == 0 && abs(distToEpipolarLine) >= 2)
         {
             poseRecoveryStat.at<bool>(i, 0) = 0;
         }
@@ -277,14 +417,11 @@ Mat PoseEstimator::solvePnP(View *v, map<long, Landmark> &landmarkBook)
     const Mat distCoeffs = CameraParameters::getDistCoeff();
     Mat R, Rvec, t;
     Mat status;
-    solvePnPRansac(landmarks, imagePoints, cameraMatrix, distCoeffs, Rvec, t, false, 100, 5.0, 0.99, status, CV_EPNP);
+    solvePnPRansac(landmarks, imagePoints, cameraMatrix, distCoeffs, Rvec, t, false, 100, 3.0, 0.99, status, CV_EPNP);
     Rodrigues(Rvec, R);
-    Mat pose = Mat::eye(4, 4, CV_64F);
-    Mat aux = pose(Rect(0, 0, 3, 3));
-    R.copyTo(aux);
-    aux = pose(Rect(3, 0, 1, 3));
-    t.copyTo(aux);
+    Mat pose = Converter::rotationTranslationToPose(R, t);
     pose = pose.inv();
+    v->setPose(pose);
     return pose.clone();
 }
 Mat PoseEstimator::estimatePoseMotionOnlyBA(View *v1, View *v2, map<long, Landmark> landmarkBook)

@@ -10,7 +10,7 @@
 
 double CameraParameters::focal = 718.8650;
 Point2d CameraParameters::principal = Point2d(607.1928, 185.2157);
-vector<float> CameraParameters::distCoeff = vector<float>(5,0.0); //{0.0, 0.0, 0.0, 0.0, 0.0};
+vector<float> CameraParameters::distCoeff = vector<float>(5, 0.0);
 Mat CameraParameters::getIntrinsic()
 {
     Mat intrinsic = Mat::eye(3, 3, CV_64F);

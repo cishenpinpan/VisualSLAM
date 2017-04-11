@@ -82,14 +82,15 @@ void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtract
             featureTracker->track(prevView->getImgs()[0], currView->getImgs()[0], prevView->getLeftFeatureSet(), currView->getLeftFeatureSet(), false);
             
             Mat poseChange = poseEstimator->estimatePose(prevView, currView);
-            poseChange.at<double>(0, 3) = poseChange.at<double>(0, 3) * 6.5;
-            poseChange.at<double>(1, 3) = poseChange.at<double>(1, 3) * 6.5;
-            poseChange.at<double>(2, 3) = poseChange.at<double>(2, 3) * 6.5;
+            poseChange.at<double>(0, 3) = poseChange.at<double>(0, 3) * 12;
+            poseChange.at<double>(1, 3) = poseChange.at<double>(1, 3) * 12;
+            poseChange.at<double>(2, 3) = poseChange.at<double>(2, 3) * 12;
             Tr = Tr * poseChange;
+            cout << Tr.col(3).rowRange(0, 3) << endl;
             currView->setPose(Tr);
             viewTracker->setKeyView(currView);
             keyFrames.push_back(i);
-            viewTracker->bundleAdjust();
+            viewTracker->bundleAdjust(MOTION_STRUCTURE, KEYVIEW_ONLY);
             Canvas canvas;
             vector<Point2f> ps1, ps2;
             KeyPoint::convert(prevView->getLeftFeatureSet().getFeaturePoints(), ps1);
@@ -98,20 +99,28 @@ void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtract
         }
         else
         {
-            featureTracker->searchLandmarks(currView, viewTracker->getLandmarkBook(), viewTracker->getLastKeyView());
+            featureTracker->track(prevView->getImgs()[0], currView->getImgs()[0], prevView->getLeftFeatureSet(), currView->getLeftFeatureSet(), false);
+            
+            // featureTracker->searchLandmarks(currView, viewTracker->getLandmarkBook(), viewTracker->getLastKeyView());
             map<long, Landmark> landmarkBook = viewTracker->getLandmarkBook();
             
-            cout << "features: " << currView->getLeftFeatureSet().size() << endl;
+            // cout << "features: " << currView->getLeftFeatureSet().size() << endl;
             // 3. estimate pose from PnP (motion-only BA)
             Tr = poseEstimator->solvePnP(currView, landmarkBook);
-            cout << Tr.col(3).rowRange(0, 3) << endl;
-            currView->setPose(Tr);
+            vector<View*> prevTwoKeyViews = viewTracker->getLastTwoKeyViews();
+            poseEstimator->estimatePoseByTrinocular(prevTwoKeyViews.front(), prevTwoKeyViews.back(), currView);
+            // cout << Tr.col(3).rowRange(0, 3) << endl;
+            // refine landmarks
+            viewTracker->bundleAdjust(STRUCTURE_ONLY, ALL_VIEWS);
+            Tr = currView->getPose();
+            // cout << Tr.col(3).rowRange(0, 3) << endl;
         }
-        
+        cout << "features:" << currView->getLeftFeatureSet().size() << endl;
         // 4. update view
         prevView = currView;
         // re-detect if necessary
-        if(i != 0 && i - keyFrames.back() >= KEYFRAME_INTERVAL)
+        if(i != 0 && (i - keyFrames.back() >= KEYFRAME_INTERVAL
+                      || currView->getLeftFeatureSet().size() < FEATURE_REDETECTION_TRIGGER))
         {
             View* prevKeyView = viewTracker->getLastKeyView();
             featureExtractor->reextractFeatures(prevKeyView->getImgs()[0], prevKeyView->getLeftFeatureSet());

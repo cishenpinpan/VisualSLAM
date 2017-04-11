@@ -38,7 +38,7 @@
 #include "Canvas.h"
 #include "Converter.h"
 #include "SystemParameters.h"
-//#include <cvsba/cvsba.h>
+#include <cvsba/cvsba.h>
 #include <set>
 
 using namespace std;
@@ -62,13 +62,25 @@ struct DataStruct
         iterations = 0;
     }
 };
-
+struct TrinocularDataStruct
+{
+    View *v1, *v2, *v;
+    map<long, vector<KeyPoint>> commonFeatures;
+    TrinocularDataStruct(View *_v1, View *_v2, View *_v, map<long, vector<KeyPoint>> _commonFeatures)
+    {
+        v1 = _v1;
+        v2 = _v2;
+        v = _v;
+        commonFeatures = _commonFeatures;
+    }
+};
 class PoseEstimator
 {
 public:
     PoseEstimator();
     Mat estimatePose(View *v1, View *v2);
     double estimateScale(View *v1, View *v2);
+    Mat estimatePoseByTrinocular(View *v1, View *v2, View *v);
     Mat estimatePoseMotionOnlyBA(View *v1, View *v2, map<long, Landmark> landmarkBook);
     Mat solvePnP(View *v, map<long, Landmark> &landmarkBook);
 private:

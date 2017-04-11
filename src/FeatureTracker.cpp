@@ -14,6 +14,14 @@ Mat FeatureTracker::track(Mat img1, Mat img2,
                           FeatureSet& featureSet1, FeatureSet& featureSet2, bool stereo)
 {
     vector<KeyPoint> keyPoints1 = featureSet1.getFeaturePoints(), keyPoints2;
+    vector<Point2f> points1 = Converter::keyPointsToPoint2fs(keyPoints1), trackings;
+    vector<float> err;
+    vector<uchar> status;
+    Size winSize=Size(21,21);
+    TermCriteria termcrit=TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 0.01);
+    
+    // KLT Tracker
+    calcOpticalFlowPyrLK(img1, img2, points1, trackings, status, err, winSize, 3, termcrit, 0, 0.001);
     
     // compute corners in img2
     Ptr<SURF> detector = SURF::create();
@@ -23,32 +31,101 @@ Mat FeatureTracker::track(Mat img1, Mat img2,
     Ptr<SURF> extractor = SURF::create();
     extractor->compute(img1, keyPoints1, descriptor1);
     extractor->detectAndCompute(img2, Mat(), keyPoints2, descriptors2);
-    vector<vector<DMatch>> matches;
-    matcher->knnMatch( descriptor1, descriptors2, matches, 2 );
+    map<int, map<int, vector<KeyPoint> > > cornerMap;
+    for(KeyPoint kp : keyPoints2)
+    {
+        cornerMap[int(kp.pt.x)][int(kp.pt.y)].push_back(kp);
+    }
+    // for each feature track, search in a neighborhood for real corners
     vector<KeyPoint> newKeyPoints1, newKeyPoints2;
     vector<long> prevIds = featureSet1.getIds(), newIds;
     
-    for(int i = 0; i < matches.size(); i++)
+    for(int i = 0; i < trackings.size(); i++)
     {
-        KeyPoint kp1 = keyPoints1[i], kp2 = keyPoints2[matches[i][0].trainIdx];
-        // Lowe's
-        if(matches[i][0].distance < 0.7 * matches[i][1].distance)
+        KeyPoint p1 = keyPoints1[i];
+        Point2f t = trackings[i];
+        long id = prevIds[i];
+        if(status[i] == 0)
+            continue;
+        if(t.x <= 0 || t.x >= 1281 || t.y <= 0 || t.y >= 376)
+            continue;
+        // search appearance of corners in neighborhood
+        KeyPoint bestMatch;
+        float minDist = -1, secondMinDist = -1;
+        float lowerBound = 100;
+        for(int x = t.x - 3; x <= t.x + 3; x++)
         {
-            newKeyPoints1.push_back(kp1);
-            newKeyPoints2.push_back(kp2);
-            newIds.push_back(prevIds[i]);
+            for(int y = t.y - 3; y <= t.y + 3; y++)
+            {
+                if(x <= 0 || x >= 1281 || y <= 0 || y >= 376)
+                    continue;
+                // go through all keypoints
+                if(cornerMap.count(x) == 0 || cornerMap[x].count(y) == 0)
+                    continue;
+                for(KeyPoint p2 : cornerMap[x][y])
+                {
+                    // keypoint found!
+                    // see how good this match is (distance of descriptors)
+                    // record only the best match
+                    vector<vector<DMatch>> match;
+                    Mat tempDes1, tempDes2;
+                    vector<KeyPoint> tempKps1, tempKps2;
+                    tempKps1.push_back(p1);
+                    tempKps2.push_back(p2);
+                    extractor->compute(img1, tempKps1, tempDes1);
+                    extractor->compute(img2, tempKps2, tempDes2);
+                    matcher->knnMatch(tempDes1, tempDes2, match, 1);
+                    lowerBound = match[0][0].distance < lowerBound ? match[0][0].distance : lowerBound;
+                    if(minDist == - 1 || match[0][0].distance < minDist)
+                    {
+                        secondMinDist = minDist;
+                        bestMatch = p2;
+                        minDist = match[0][0].distance;
+                    
+                    }
+//                    Canvas canvas;
+//                    vector<Point2f> ps1, ps2, track;
+//                    KeyPoint::convert(tempKps1, ps1);
+//                    KeyPoint::convert(tempKps2, ps2);
+//                    track.push_back(trackings[i]);
+//                    canvas.drawFeatureMatches(img1, img2, ps1, track);
+//                    canvas.drawFeatureMatches(img1, img2, ps1, ps2);
+                }
+            }
+        }
+        if(minDist != -1 && minDist < 0.2)
+        {
+            newKeyPoints1.push_back(p1);
+            newKeyPoints2.push_back(bestMatch);
+            newIds.push_back(id);
         }
     }
-    
+    // update features and ids
     featureSet1.setFeaturePoints(newKeyPoints1);
     featureSet1.setIds(newIds);
     featureSet2.setFeaturePoints(newKeyPoints2);
     featureSet2.setIds(newIds);
     
+//    Canvas canvas;
+//    for(int i = 0; i < 100; i++)
+//    {
+//        vector<Point2f> ps1, ps2;
+//        vector<KeyPoint> kps1, kps2;
+//        kps1.push_back(featureSet1.getFeaturePoints()[i]);
+//        kps2.push_back(featureSet2.getFeaturePoints()[i]);
+//        KeyPoint::convert(kps1, ps1);
+//        KeyPoint::convert(kps2, ps2);
+//        canvas.drawFeatureMatches(img1, img2, ps1, ps2);
+//    }
     
+
+    Canvas canvas;
+    vector<Point2f> ps1, ps2;
+    KeyPoint::convert(featureSet1.getFeaturePoints(), ps1);
+    KeyPoint::convert(featureSet2.getFeaturePoints(), ps2);
+    // canvas.drawFeatureMatches(img1, img2, ps1, ps2);
     
-    Mat status = Mat::ones(featureSet1.size(), 1, CV_64F);
-    return status.clone();
+    return Mat::ones(featureSet1.size(), 1, CV_64F);
 }
 // track from landmarks
 Mat FeatureTracker::searchLandmarks(View* v, map<long, Landmark> landmarkBook, View* prevView)
@@ -122,21 +199,22 @@ Mat FeatureTracker::searchLandmarks(View* v, map<long, Landmark> landmarkBook, V
                 }
             }
         }
-        if(minDist == -1 || minDist > 0.2)
+        if(minDist == -1 || minDist > 0.4)
             continue;
-        Canvas canvas;
-        vector<Point2f> ps1 = {Point2f(prevView->getLeftFeatureSet().getFeatureById(it->first).getPoint().pt.x, prevView->getLeftFeatureSet().getFeatureById(it->first).getPoint().pt.y)}, ps2;
-        vector<KeyPoint> tempKps;
-        tempKps.push_back(bestKp);
-        KeyPoint::convert(tempKps, ps2);
-        canvas.drawFeatureMatches(prevView->getImgs()[0], img, ps1, ps2);
         newKeyPoints.push_back(bestKp);
         newIds.push_back(it->first);
-        
     }
     v->getLeftFeatureSet().setFeaturePoints(newKeyPoints);
     v->getLeftFeatureSet().setIds(newIds);
-    
+    Canvas canvas;
+    vector<Point2f> ps1, ps2;
+    for(long id: newIds)
+    {
+        KeyPoint tmp = prevView->getLeftFeatureSet().getFeatureById(id).getPoint();
+        ps1.push_back(Point2f(tmp.pt.x, tmp.pt.y));
+    }
+    KeyPoint::convert(v->getLeftFeatureSet().getFeaturePoints(), ps2);
+    canvas.drawFeatureMatches(prevView->getImgs()[0], img, ps1, ps2);
     Mat status = Mat::ones(v->getLeftFeatureSet().size(), 1, CV_64F);
     return status.clone();
 }
