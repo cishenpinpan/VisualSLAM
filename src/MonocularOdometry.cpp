@@ -14,7 +14,7 @@ vector<vector<double>> MonocularOdometry::readGroundTruth(int numPoses, ViewRead
     vector<vector<double>> gt;
     ifstream input;
     string track = reader->getTrack();
-    input.open("/Users/orangechicken/Documents/MATLAB/KITTI/GroundTruth/poses/" + track + ".txt");
+    input.open(GROUNDTRUTH_DIR + track + ".txt");
     for(int i = 0; i <= numPoses; i++)
     {
         vector<double> row(12, 0.0);
@@ -141,7 +141,7 @@ void MonocularOdometry::save(string track, vector<View*> views)
 {
     // write poses to file
     ofstream output;
-    output.open("/Users/orangechicken/Desktop/SLAM/KITTI_" + track + "_MonoLeft.output");
+    output.open(OUTPUT_DIR + track + "_MonoLeft.output");
     for(int i = 0; i < views.size(); i++)
     {
         Mat pose = views[i]->getPose();
@@ -159,7 +159,7 @@ void MonocularOdometry::save(string track, vector<View*> views)
         }
     }
     output.close();
-    output.open("/Users/orangechicken/Desktop/SLAM/KITTI_" + track + "_KeyFrames.output");
+    output.open(OUTPUT_DIR + track + "_KeyFrames.output");
     for(int i = 0; i < keyFrames.size(); i++)
     {
         output << keyFrames[i];

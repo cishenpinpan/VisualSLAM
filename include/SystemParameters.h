@@ -23,5 +23,8 @@
 #define ALL_VIEWS false
 
 #define TRACK "00"
+#define IMAGE_DIR "/Users/orangechicken/Documents/MATLAB/KITTI/"
+#define GROUNDTRUTH_DIR "/Users/orangechicken/Documents/MATLAB/KITTI/GroundTruth/poses/"
+#define OUTPUT_DIR "/Users/orangechicken/Desktop/SLAM/KITTI_"
 
 #endif /* SystemParameters_h */
