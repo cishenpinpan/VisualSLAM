@@ -528,7 +528,7 @@ Mat PoseEstimator::estimatePoseMotionOnlyBA(View *v1, View *v2, map<long, Landma
     }
     
     optimizer.setVerbose(false);
-    optimizer.save("/Users/orangechicken/Desktop/SLAM/g2o_data/firstInput.g2o");
+    // optimizer.save("/Users/orangechicken/Desktop/SLAM/g2o_data/firstInput.g2o");
     
     // start optimization
     optimizer.initializeOptimization();
@@ -536,7 +536,7 @@ Mat PoseEstimator::estimatePoseMotionOnlyBA(View *v1, View *v2, map<long, Landma
     optimizer.optimize(10);
     
     // save result
-    optimizer.save("/Users/orangechicken/Desktop/SLAM/g2o_data/firstOutput.g2o");
+    // optimizer.save("/Users/orangechicken/Desktop/SLAM/g2o_data/firstOutput.g2o");
     cout << "BA Finished" << endl;
     
     // update view2
