@@ -85,9 +85,10 @@ void Canvas::drawLine( Mat img, Point2f start, Point2f end )
 
 void Canvas::drawTrackingPath(Mat img, vector<Point2f> keyPoints1, vector<Point2f> keyPoints2)
 {
+	Mat tempImg = img.clone();
 	for (int i = 0; i < keyPoints1.size(); i++)
 	{
-		drawLine(img, keyPoints1[i], keyPoints2[i]);
+		drawLine(tempImg, keyPoints1[i], keyPoints2[i]);
 	}
 
 	vector<KeyPoint> TempKeypoints1;
@@ -95,7 +96,7 @@ void Canvas::drawTrackingPath(Mat img, vector<Point2f> keyPoints1, vector<Point2
 	{
 		TempKeypoints1.push_back(KeyPoint(keyPoints1[i],1.f));
 	}
-	drawKeypoints(img,TempKeypoints1,img);
+	drawKeypoints(tempImg,TempKeypoints1,tempImg);
 	namedWindow("Tracking Path", WINDOW_AUTOSIZE);
 	imshow("Tracking Path", img);
 	waitKey(0);
@@ -103,17 +104,18 @@ void Canvas::drawTrackingPath(Mat img, vector<Point2f> keyPoints1, vector<Point2
 
 void Canvas::drawTrackingPath(Mat img, vector<KeyPoint> keyPoints1, vector<KeyPoint> keyPoints2)
 {
+	Mat tempImg = img.clone();
 	vector<Point2f> tempPoints1, tempPoints2;
 	KeyPoint::convert(keyPoints1, tempPoints1);
 	KeyPoint::convert(keyPoints2, tempPoints2);
 	for (int i = 0; i < keyPoints1.size(); i++)
 	{
 
-		drawLine(img, tempPoints1[i], tempPoints2[i]);
+		drawLine(tempImg, tempPoints1[i], tempPoints2[i]);
 	}
-	drawKeypoints(img, keyPoints1, img);
+	drawKeypoints(tempImg, keyPoints1, tempImg);
 	namedWindow("Tracking Path", WINDOW_AUTOSIZE);
-	imshow("Tracking Path", img);
+	imshow("Tracking Path", tempImg);
 	waitKey(0);
 }
 
