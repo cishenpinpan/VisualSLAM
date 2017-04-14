@@ -27,6 +27,10 @@ public:
     Mat track(Mat img1, Mat img2, FeatureSet& featureSet1,
                         FeatureSet& featureSet2, bool stereo);
     Mat searchLandmarks(View* v, map<long, Landmark> landmarkBook, View* prevView);
+
+	vector<long int> kltTrack(Mat img1, Mat img2, FeatureSet& featureSet1, FeatureSet& featureSet2, bool stereo);
+
+	void refineTrackedFeatures(Mat img1, Mat img2, FeatureSet& featureSet1, FeatureSet& featureSet2, vector<long int> idContainer, bool stereo);
     // stereo
     void track(View *v);
 
