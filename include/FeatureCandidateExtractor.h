@@ -27,13 +27,13 @@ using namespace cv::xfeatures2d;
 
 class FeatureCandidateExtractor {
 public:
-	FeatureCandidateExtractor(){_featureName = FEATURE_NAME; _descriptorName = DESCRIPTOR_NAME;};
+    FeatureCandidateExtractor(){_featureName = FEATURE_NAME; _descriptorName = DESCRIPTOR_NAME;};
     vector<KeyPoint> extractFeatures(Mat img);
-	Mat computeDescriptors(Mat img, vector<KeyPoint> keyPoints1);
+    Mat computeDescriptors(const Mat img, vector<KeyPoint> &keyPoints1);
     //vector<KeyPoint> reextractFeatures(Mat img_1, FeatureSet& featureSet);
 private:
-	string _featureName;
-	string _descriptorName;
-
+    string _featureName;
+    string _descriptorName;
+    
 };
 #endif /* FeatureCandidateExtractor_h */
