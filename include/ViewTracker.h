@@ -50,7 +50,7 @@ public:
     ~ViewTracker();
     void addView(View *v);
     vector<View*> getViews();
-    void bundleAdjust(int option, bool keyview);
+    void bundleAdjust(int option, bool global);
     void bundleAdjustMotionOnly();
     void computeLandmarks(bool initial);
     map<long, Landmark>& getLandmarkBook(){return landmarkBook;}

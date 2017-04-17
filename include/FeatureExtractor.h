@@ -27,11 +27,11 @@ using namespace cv::xfeatures2d;
 
 class FeatureExtractor {
 public:
-	FeatureExtractor(){_featureName = FEATURE_NAME;};
+    FeatureExtractor(){_featureName = FEATURE_NAME;};
     vector<KeyPoint> extractFeatures(Mat img_1, FeatureSet& featureSet);
     vector<KeyPoint> reextractFeatures(Mat img_1, FeatureSet& featureSet);
 private:
-	string _featureName;
-
+    string _featureName;
+    
 };
 #endif /* FeatureExtractor_h */

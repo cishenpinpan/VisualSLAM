@@ -13,7 +13,7 @@ ViewReader::ViewReader(string _dataset, string _track, bool _stereo)
     dataset = _dataset;
     track = _track;
     stereo = _stereo;
-    index = 0;
+    index = START_FRAME;
 }
 
 vector<Mat> ViewReader::next()

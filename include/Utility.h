@@ -45,6 +45,6 @@ Mat getEssentialMatrix(const Mat R, const Mat t);
 double projectEpipolarLine(const Mat E, Point2f pixel1, Point2f pixel2);
 
 
-           
+
 
 #endif /* Utility_h */

@@ -66,12 +66,15 @@ struct TrinocularDataStruct
 {
     View *v1, *v2, *v;
     map<long, vector<KeyPoint>> commonFeatures;
-    TrinocularDataStruct(View *_v1, View *_v2, View *_v, map<long, vector<KeyPoint>> _commonFeatures)
+    int start, end;
+    TrinocularDataStruct(View *_v1, View *_v2, View *_v, map<long, vector<KeyPoint>> _commonFeatures, int _s, int _e)
     {
         v1 = _v1;
         v2 = _v2;
         v = _v;
         commonFeatures = _commonFeatures;
+        start = _s;
+        end = _e;
     }
 };
 class PoseEstimator

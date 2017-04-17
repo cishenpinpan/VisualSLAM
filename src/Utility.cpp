@@ -193,6 +193,7 @@ pair<double, double> reproject3DPoint(Point3d point3d, Mat pose, KeyPoint point2
         error.first = point2d.pt.x - pixelC.at<double>(0, 0);
         error.second = point2d.pt.y - pixelC.at<double>(1, 0);
     }
+    // cout << pixelC << endl;
     return error;
 }
 double projectEpipolarLine(const Mat E, Point2f point1, Point2f point2)

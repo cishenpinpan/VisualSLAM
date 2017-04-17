@@ -27,16 +27,7 @@ void ViewTracker::addView(View *v)
 void ViewTracker::setKeyView(View *v)
 {
     keyViews.push_back(v);
-    // when adding a new keyview, update landmarks
-    if(keyViews.size() > 1)
-    {
-        if(keyViews.size() == 2)
-            computeLandmarks(true);
-        else
-            computeLandmarks(false);
-    }
-    
-    
+    v->setKeyView();
 }
 void ViewTracker::computeLandmarks(bool initial)
 {
@@ -121,11 +112,17 @@ View* ViewTracker::popLastView()
     return temp;
 }
 
-void ViewTracker::bundleAdjust(int option, bool keyview)
+void ViewTracker::bundleAdjust(int option, bool global)
 {
-    vector<View*> viewsForBA = keyview ? keyViews : views;
-    
-    if(viewsForBA.size() < BUNDLE_ADJUSTMENT_LENGTH)
+    vector<View*> viewsForBA;
+    if(global)
+        viewsForBA = vector<View*>(keyViews);
+    else
+    {
+        viewsForBA = vector<View*>(getLastTwoKeyViews());
+        viewsForBA.push_back(views.back());
+    }
+    if(viewsForBA.size() < 2)
         return ;
     
     // setting up g2o solver
@@ -148,7 +145,7 @@ void ViewTracker::bundleAdjust(int option, bool keyview)
     }
     
     // setting up camera poses as vertices
-    int start = int(viewsForBA.size()) - BUNDLE_ADJUSTMENT_LENGTH;
+    int start = max(0, int(viewsForBA.size()) - BUNDLE_ADJUSTMENT_LENGTH);
     vector<g2o::SE3Quat, aligned_allocator<g2o::SE3Quat> > truePoses;
     for (int i = start; i < viewsForBA.size(); i++)
     {
@@ -264,10 +261,11 @@ void ViewTracker::bundleAdjust(int option, bool keyview)
         double xDiff = abs(currPose.at<double>(0, 3) - estimatedPose.at<double>(0, 3));
         double yDiff = abs(currPose.at<double>(1, 3) - estimatedPose.at<double>(1, 3));
         double zDiff = abs(currPose.at<double>(2, 3) - estimatedPose.at<double>(2, 3));
-//        
+        
 //        if(xDiff > 1 || yDiff > 1 || zDiff > 1)
 //        {
-//            continue;
+//            cout << "Large change after BA." << endl;
+//            return ;
 //        }
         viewsForBA[i]->setPose(estimatedPose);
     }

@@ -29,94 +29,94 @@ void Canvas::drawFeatureMatches(Mat img1, Mat img2, vector<Point2f> points1,vect
 
 void Canvas::drawSingleImage(Mat img1)
 {
-	namedWindow("Single image",WINDOW_AUTOSIZE);
-	imshow("Single image", img1);
-	waitKey(0);
+    namedWindow("Single image",WINDOW_AUTOSIZE);
+    imshow("Single image", img1);
+    waitKey(0);
 }
 
 void Canvas::drawKeyPoints(Mat img1, vector<Point2f> points1, string windowName)
 {
-	Mat canvas;
-	vector<KeyPoint> Keypoints1;
-	for (int i = 0; i < points1.size(); i++)
-	{
-		Keypoints1.push_back(KeyPoint(points1[i],1.f));
-	}
-	drawKeypoints(img1,Keypoints1,canvas);
-
-	namedWindow(windowName, WINDOW_AUTOSIZE);
-	imshow(windowName, canvas);
-	waitKey(0);
-
+    Mat canvas;
+    vector<KeyPoint> Keypoints1;
+    for (int i = 0; i < points1.size(); i++)
+    {
+        Keypoints1.push_back(KeyPoint(points1[i],1.f));
+    }
+    drawKeypoints(img1,Keypoints1,canvas);
+    
+    namedWindow(windowName, WINDOW_AUTOSIZE);
+    imshow(windowName, canvas);
+    waitKey(0);
+    
 }
 
 void Canvas::drawKeyPoints(Mat img1, vector<KeyPoint> points1, string windowName)
 {
-	Mat canvas;
-	drawKeypoints(img1, points1, canvas);
-
-	namedWindow(windowName, WINDOW_AUTOSIZE);
-	imshow(windowName, canvas);
-	waitKey(0);
+    Mat canvas;
+    drawKeypoints(img1, points1, canvas);
+    
+    namedWindow(windowName, WINDOW_AUTOSIZE);
+    imshow(windowName, canvas);
+    waitKey(0);
 }
 
 
 
 void Canvas::drawTrackingPathEveryOtherK(Mat img, vector<KeyPoint> keyPoints1, vector<KeyPoint> keyPoints2, int numOfDrawing)
 {
-	vector<KeyPoint> tempKeyPoints1, tempKeyPoints2;
-	for (int i = 0; i < keyPoints1.size(); i += numOfDrawing)
-	{
-		tempKeyPoints1.push_back(keyPoints1[i]);
-		tempKeyPoints2.push_back(keyPoints2[i]);
-	}
-
-	drawTrackingPath(img, tempKeyPoints1, tempKeyPoints2);
+    vector<KeyPoint> tempKeyPoints1, tempKeyPoints2;
+    for (int i = 0; i < keyPoints1.size(); i += numOfDrawing)
+    {
+        tempKeyPoints1.push_back(keyPoints1[i]);
+        tempKeyPoints2.push_back(keyPoints2[i]);
+    }
+    
+    drawTrackingPath(img, tempKeyPoints1, tempKeyPoints2);
 }
 
 
 
 void Canvas::drawLine( Mat img, Point2f start, Point2f end )
 {
-	int thickness = 0.5;
-	int lineType = LINE_8;
-	line( img,start,end,Scalar( 0, 0, 0 ),thickness,lineType );
+    int thickness = 0.5;
+    int lineType = LINE_8;
+    line( img,start,end,Scalar( 255, 0, 0 ),thickness,lineType );
 }
 
 void Canvas::drawTrackingPath(Mat img, vector<Point2f> keyPoints1, vector<Point2f> keyPoints2)
 {
-	Mat tempImg = img.clone();
-	for (int i = 0; i < keyPoints1.size(); i++)
-	{
-		drawLine(tempImg, keyPoints1[i], keyPoints2[i]);
-	}
-
-	vector<KeyPoint> TempKeypoints1;
-	for (int i = 0; i < keyPoints1.size(); i++)
-	{
-		TempKeypoints1.push_back(KeyPoint(keyPoints1[i],1.f));
-	}
-	drawKeypoints(tempImg,TempKeypoints1,tempImg);
-	namedWindow("Tracking Path", WINDOW_AUTOSIZE);
-	imshow("Tracking Path", img);
-	waitKey(0);
+    Mat tempImg = img.clone();
+    for (int i = 0; i < keyPoints1.size(); i++)
+    {
+        drawLine(tempImg, keyPoints1[i], keyPoints2[i]);
+    }
+    
+    vector<KeyPoint> TempKeypoints1;
+    for (int i = 0; i < keyPoints1.size(); i++)
+    {
+        TempKeypoints1.push_back(KeyPoint(keyPoints1[i],1.f));
+    }
+    drawKeypoints(tempImg,TempKeypoints1,tempImg);
+    namedWindow("Tracking Path", WINDOW_AUTOSIZE);
+    imshow("Tracking Path", img);
+    waitKey(0);
 }
 
 void Canvas::drawTrackingPath(Mat img, vector<KeyPoint> keyPoints1, vector<KeyPoint> keyPoints2)
 {
-	Mat tempImg = img.clone();
-	vector<Point2f> tempPoints1, tempPoints2;
-	KeyPoint::convert(keyPoints1, tempPoints1);
-	KeyPoint::convert(keyPoints2, tempPoints2);
-	for (int i = 0; i < keyPoints1.size(); i++)
-	{
-
-		drawLine(tempImg, tempPoints1[i], tempPoints2[i]);
-	}
-	drawKeypoints(tempImg, keyPoints1, tempImg);
-	namedWindow("Tracking Path", WINDOW_AUTOSIZE);
-	imshow("Tracking Path", tempImg);
-	waitKey(0);
+    Mat tempImg = img.clone();
+    vector<Point2f> tempPoints1, tempPoints2;
+    KeyPoint::convert(keyPoints1, tempPoints1);
+    KeyPoint::convert(keyPoints2, tempPoints2);
+    for (int i = 0; i < keyPoints1.size(); i++)
+    {
+        
+        drawLine(tempImg, tempPoints1[i], tempPoints2[i]);
+    }
+    drawKeypoints(tempImg, keyPoints1, tempImg);
+    namedWindow("Tracking Path", WINDOW_AUTOSIZE);
+    imshow("Tracking Path", tempImg);
+    waitKey(0);
 }
 
 
