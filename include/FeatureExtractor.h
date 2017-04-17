@@ -15,6 +15,8 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include "Feature.h"
 #include "Factory.h"
+#include "SystemParameters.h"
+#include <iostream>
 #include <stdio.h>
 #include <set>
 #include <map>
@@ -25,7 +27,11 @@ using namespace cv::xfeatures2d;
 
 class FeatureExtractor {
 public:
+	FeatureExtractor(){_featureName = FEATURE_NAME;};
     vector<KeyPoint> extractFeatures(Mat img_1, FeatureSet& featureSet);
     vector<KeyPoint> reextractFeatures(Mat img_1, FeatureSet& featureSet);
+private:
+	string _featureName;
+
 };
 #endif /* FeatureExtractor_h */

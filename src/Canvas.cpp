@@ -80,7 +80,7 @@ void Canvas::drawLine( Mat img, Point2f start, Point2f end )
 {
 	int thickness = 0.5;
 	int lineType = LINE_8;
-	line( img,start,end,Scalar( 255, 0, 0 ),thickness,lineType );
+	line( img,start,end,Scalar( 0, 0, 0 ),thickness,lineType );
 }
 
 void Canvas::drawTrackingPath(Mat img, vector<Point2f> keyPoints1, vector<Point2f> keyPoints2)

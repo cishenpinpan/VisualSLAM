@@ -23,7 +23,7 @@ vector<long int> FeatureTracker::kltTrack(Mat img1, Mat img2, FeatureSet& featur
     Size winSize=Size(31,31);
     TermCriteria termcrit=TermCriteria(TermCriteria::COUNT+TermCriteria::EPS, 30, 0.01);
 	calcOpticalFlowPyrLK(img1,img2,points1,trackings, status, err, winSize, 3, termcrit, 0, 0.001);
-	
+
 	//build FeatureSet2 
 	vector<KeyPoint> keyPoints2;
 	for (int i = 0; i < trackings.size(); i++)
@@ -39,34 +39,45 @@ vector<long int> FeatureTracker::kltTrack(Mat img1, Mat img2, FeatureSet& featur
 		Point2f pt = points1[i];
 		if(t.x <= 0 || t.x >= 1281 || t.y <= 0 || t.y >= 376)
 		{
-			status[i] = 0;
+			status[i] = (uchar)0;
 		}
-		if (pt.x <= 20 || pt.x >= 1261 || pt.y <= 20 || pt.y >= 356)
-		{
-			status[i] = 0;
-		}
-					
 	}
 	//Remove the bad tracking according to status
+	vector<KeyPoint> newFeatures1;
+	vector<KeyPoint> newFeatures2;
+	vector<long> newIDs1;
+	vector<long> newIDs2;
 	for (int i = 0; i < status.size() ;i++)
 	{
-		Feature oneFeature = featureSet2.getFeatureByIndex(i);
-		if (status[i] == 0)
+		Feature oneFeature1 = featureSet1.getFeaturePoints()[i];
+		Feature oneFeature2 = featureSet2.getFeaturePoints()[i];
+		long oneID1 = featureSet1.getIds()[i];
+		long oneID2 = featureSet2.getIds()[i];	
+		if (status[i] == 1)
 		{
-			featureSet2.removeFeature(oneFeature.getId());
-			featureSet1.removeFeature(oneFeature.getId());
+		
+			newFeatures1.push_back(oneFeature1.getPoint());
+			newFeatures2.push_back(oneFeature2.getPoint());
+			newIDs1.push_back(oneID1);
+			newIDs2.push_back(oneID2);
 		}
 	}
+	
+	featureSet1.setFeaturePoints(newFeatures1);
+	featureSet1.setIds(newIDs1);
+	featureSet2.setFeaturePoints(newFeatures2);
+	featureSet2.setIds(newIDs2);
+
 	std::cout << "Num feature: " << featureSet1.getFeaturePoints().size() << " " << featureSet2.getFeaturePoints().size() << std::endl; 
-//	Canvas canvas;
-//	canvas.drawTrackingPathEveryOtherK(img1, featureSet1.getFeaturePoints(), featureSet2.getFeaturePoints(),5);
-//	canvas.drawKeyPoints(img2, featureSet2.getFeaturePoints(), "Tenth Frame & features");
-	//Return the newst id
+	Canvas canvas;
+	canvas.drawTrackingPathEveryOtherK(img1, featureSet1.getFeaturePoints(), featureSet2.getFeaturePoints(),1);
+
 	vector<long int> idContainer;
 	for (int i = 0; i < featureSet1.getFeaturePoints().size(); i++)
 	{
-		Feature oneFeature = featureSet2.getFeatureByIndex(i);
-		idContainer.push_back(oneFeature.getId());
+		Feature oneFeature = featureSet2.getFeaturePoints()[i];
+		long oneID = featureSet2.getIds()[i];
+		idContainer.push_back(oneID);
 	}
 	return idContainer;
 }
@@ -85,24 +96,35 @@ void FeatureTracker::refineTrackedFeatures(Mat img1, Mat img2, FeatureSet& featu
 	canvas.drawKeyPoints(img2, trackedPointsLastView, "Key Frame & tracks");
 
 	// Create feature extractor object
-	Ptr<SURF> extractor = SURF::create();
-	extractor->setNOctaveLayers(6);
+	FeatureCandidateExtractor extractor;
 	//Compute descriptors from two views
-	vector<KeyPoint> keyPoints2;
-	extractor->detect(img2,keyPoints2);
-	
+	vector<KeyPoint> keyPoints2 = extractor.extractFeatures(img2);
+	vector<Mat> Descriptor2;
+	vector<Mat> Descriptor1;
+	Mat tempDesc2 = extractor.computeDescriptors(img2, keyPoints2);
+	Mat tempDesc1 = extractor.computeDescriptors(img1, keyPointsFirstView);
+	for (int i = 0; i < keyPoints2.size(); i++)
+	{
+		Descriptor2.push_back(tempDesc2.row(i));
+	}
+	for (int i = 0; i < keyPointsFirstView.size(); i++)
+	{
+		Descriptor1.push_back(tempDesc1.row(i));
+	}
+
 	canvas.drawKeyPoints(img2, keyPoints2, "Key Frame & Keypoints");
 	
 	//Build index for searching
-	Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create("BruteForce");
-	map<int, map<int, vector<KeyPoint> > > cornerMap;
-    for(KeyPoint kp : keyPoints2)
+	Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create("BruteForce-Hamming");
+	map<int, map<int, vector<pair<KeyPoint, Mat> > > > cornerMap;
+    for(int i = 0; i < keyPoints2.size(); i++)
     {
-        cornerMap[int(kp.pt.x)][int(kp.pt.y)].push_back(kp);
+		KeyPoint kp = keyPoints2[i];
+        cornerMap[int(kp.pt.x)][int(kp.pt.y)].push_back(pair<KeyPoint, Mat>(kp,Descriptor2[i]));
     }
 	vector<KeyPoint> newKeyPoints1, newKeyPoints2;
     vector<long> prevIds = featureSet1.getIds(), newIds;
-	int winSize = 5;
+	int winSize = 1;
 	//For each feature track Search keypoints in the neighborhood of tracked points in last view
 	for(int i = 0; i < trackedPointsLastView.size(); i++)
     {
@@ -112,7 +134,7 @@ void FeatureTracker::refineTrackedFeatures(Mat img1, Mat img2, FeatureSet& featu
         if(t.pt.x <= 0 || t.pt.x >= 1281 || t.pt.y <= 0 || t.pt.y >= 376)
             continue;
         // search appearance of corners in neighborhood
-        KeyPoint bestMatch;
+        pair<KeyPoint, Mat> bestMatch;
         float minDist = -1, secondMinDist = -1;
         float lowerBound = 100;
         for(int x = t.pt.x - winSize; x <= t.pt.x + winSize; x++)
@@ -126,24 +148,27 @@ void FeatureTracker::refineTrackedFeatures(Mat img1, Mat img2, FeatureSet& featu
 				{
                     continue;
 				}
-                for(KeyPoint p2 : cornerMap[x][y])
+				//std::cout << "Size:" << cornerMap[x][y].size() << std::endl; 
+                for(pair<KeyPoint, Mat> pair2 : cornerMap[x][y])
                 {
-                    // keypoint found!
+					// keypoint found!
                     // see how good this match is (distance of descriptors)
                     // record only the best match
                     vector<vector<DMatch>> match;
                     Mat tempDes1, tempDes2;
                     vector<KeyPoint> tempKps1, tempKps2;
                     tempKps1.push_back(p1);
-                    tempKps2.push_back(p2);
-                    extractor->compute(img1, tempKps1, tempDes1);
-                    extractor->compute(img2, tempKps2, tempDes2);
+                    tempKps2.push_back(pair2.first);
+                    tempDes1 = Descriptor1[i];
+					//std::cout << tempDes1.size() << std::endl;
+                    tempDes2 = pair2.second;
+					//std::cout << tempDes1.size() << std::endl;
                     matcher->knnMatch(tempDes1, tempDes2, match, 1);
                     lowerBound = match[0][0].distance < lowerBound ? match[0][0].distance : lowerBound;
                     if(minDist == - 1 || match[0][0].distance < minDist)
                     {
-                        secondMinDist = minDist;
-                        bestMatch = p2;
+                       secondMinDist = minDist;
+                        bestMatch = pair2;
                         minDist = match[0][0].distance;
                     
                     }
@@ -157,10 +182,10 @@ void FeatureTracker::refineTrackedFeatures(Mat img1, Mat img2, FeatureSet& featu
                 }
             }
         }
-		if(minDist != -1 && (minDist < 0.6 * secondMinDist || secondMinDist == -1))
+		if(minDist != -1 && (minDist < 0.8 * secondMinDist || secondMinDist == -1))
         {
             newKeyPoints1.push_back(p1);
-            newKeyPoints2.push_back(bestMatch);
+            newKeyPoints2.push_back(bestMatch.first);
             newIds.push_back(id);
         }
 		
@@ -168,6 +193,10 @@ void FeatureTracker::refineTrackedFeatures(Mat img1, Mat img2, FeatureSet& featu
    	std::cout <<"Num after refine 1: " << newKeyPoints1.size()	 << std::endl;
 	std::cout <<"Num after refine 2: " << newKeyPoints2.size() << std::endl;
 	canvas.drawTrackingPathEveryOtherK(img1, newKeyPoints1, newKeyPoints2,1);
+	featureSet1.setFeaturePoints(newKeyPoints1);
+	featureSet2.setFeaturePoints(newKeyPoints2);
+	featureSet1.setIds(newIds);
+	featureSet2.setIds(newIds);
 
 }
 

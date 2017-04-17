@@ -7,19 +7,39 @@
 //
 
 #include "FeatureExtractor.h"
+#include "Canvas.h"
 
 vector<KeyPoint> FeatureExtractor::extractFeatures(Mat img, FeatureSet& featureSet)
 {
-    vector<KeyPoint> keypoints;
-    Ptr<SURF> detector = SURF::create();
-    detector->detect(img, keypoints);
+	vector<KeyPoint> keypoints;
+
+	if (_featureName == "SURF")
+	{
+		Ptr<SURF> detector = SURF::create();
+		//detector->setNOctaves(6);
+		detector->setNOctaveLayers(10);
+		detector->detect(img, keypoints);
+		
+	}
+	else if (_featureName == "ORB")
+	{
+		Ptr<ORB> detector = ORB::create();
+		detector->setScaleFactor(2);
+		detector->setMaxFeatures(3500);
+		detector->setNLevels(6);
+		detector->detect(img, keypoints);
+	}
+	else
+	{
+		std::cout << "Not Supported" << std::endl;
+	}
     // remove existing feature points
     featureSet.clear();
     IdGenerator* idGenerator = IdGenerator::createInstance();
     for(int i = 0; i < keypoints.size(); i++)
     {
         featureSet.addFeature(keypoints[i], idGenerator->next());
-    }
+    }	
     return keypoints;
 }
 
@@ -27,12 +47,18 @@ vector<KeyPoint> FeatureExtractor::reextractFeatures(Mat img, FeatureSet& featur
 {
     vector<KeyPoint> keypoints;
     Ptr<SURF> detector = SURF::create();
+//	detector->setNOctaves(6);
+//	detector->setNOctaveLayers(6);
+//	detector->setHessianThreshold(400);
     detector->detect(img, keypoints);
     // append newly extracted feature points back to existing feature set
     map<double, set<double>> existingPointSet;
     vector<KeyPoint> existingPoints = featureSet.getFeaturePoints();
+//	Canvas canvas;
+//	canvas.drawKeyPoints(img,keypoints,"Change threshold");
     for(int i = 0; i < existingPoints.size(); i++)
         existingPointSet[existingPoints[i].pt.x].insert(existingPoints[i].pt.y);
+
     IdGenerator* idGenerator = IdGenerator::createInstance();
     for(int i = 0; i < keypoints.size(); i++)
     {
