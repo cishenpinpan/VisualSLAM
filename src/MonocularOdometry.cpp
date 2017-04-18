@@ -80,14 +80,7 @@ void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtract
         {
             // track features
             vector<View*> currViews = viewTracker->getViews();
-            for(int j = 0; j < i - 1; j++)
-            {
-                View* v1 = currViews[j], *v2 = currViews[j + 1];
-                featureTracker->kltTrack(v1->getImgs()[0], v2->getImgs()[0], v1->getLeftFeatureSet(), v2->getLeftFeatureSet(), false);
-            }
-            // refine (Lowe's)
-            View* v1 = currViews[0], *v2 = currViews.back();
-            featureTracker->refineTrackedFeatures(v1->getImgs()[0], v2->getImgs()[0], v1->getLeftFeatureSet(), v2->getLeftFeatureSet(), v2->getLeftFeatureSet().getIds(), false);
+            featureTracker->trackAndMatch(currViews);
             
             Mat poseChange = poseEstimator->estimatePose(prevView, currView);
             poseChange.at<double>(0, 3) = poseChange.at<double>(0, 3) * 3.0;
@@ -106,22 +99,18 @@ void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtract
             
             featureTracker->kltTrack(prevView->getImgs()[0], currView->getImgs()[0],
                                      prevView->getLeftFeatureSet(), currView->getLeftFeatureSet(), false);
-//            featureTracker->refineTrackedFeatures(prevView->getImgs()[0], currView->getImgs()[0],
-//                                                  prevView->getLeftFeatureSet(), currView->getLeftFeatureSet(),
-//                                                  currView->getLeftFeatureSet().getIds(), false);
-            
-            // featureTracker->searchLandmarks(currView, viewTracker->getLandmarkBook(), viewTracker->getLastKeyView());
-            map<long, Landmark> landmarkBook = viewTracker->getLandmarkBook();
             
             // 3. estimate pose from PnP (motion-only BA)
-            poseEstimator->solvePnP(currView, landmarkBook);
+            poseEstimator->solvePnP(currView, viewTracker->getLandmarkBook());
             
             // refine landmarks
+            cout << currView->getT() << endl;
             viewTracker->bundleAdjust(STRUCTURE_ONLY, LOCAL_BA);
             
             Tr = currView->getPose();
             cout << Tr.col(3).rowRange(0, 3) << endl;
         }
+        
         cout << "features:" << currView->getLeftFeatureSet().size() << endl;
         
         // decline large motions
@@ -136,32 +125,45 @@ void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtract
         // 1. #KEYFRAME_INTERVAL frames has passed
         // 2. #features has dropped below the threshold
         if(((i != 0 && i - keyFrames.back() >= KEYFRAME_INTERVAL) &&
-            currView->getLeftFeatureSet().size() < 0.5 * lastKeyView->getLeftFeatureSet().size()) ||
+            currView->getLeftFeatureSet().size() < 0.7 * lastKeyView->getLeftFeatureSet().size()) ||
             currView->getLeftFeatureSet().size() < 50)
         {
             viewTracker->setKeyView(currView);
             // refine the frame before nominating it as a keyframe
-//            viewTracker->bundleAdjust(MOTION_STRUCTURE, GLOBAL_BA);
-//            cout << viewTracker->getLastView()->getT() << endl;
-            
-            bool stereo = true;
             View* prevKeyView = viewTracker->getLastTwoKeyViews().front(),
                     currKeyView = viewTracker->getLastTwoKeyViews().back();
+            featureTracker->refineTrackedFeatures(prevKeyView->getImgs()[0], currView->getImgs()[0], prevKeyView->getLeftFeatureSet(), prevKeyView->getLeftFeatureSet(), false);
+            poseEstimator->solvePnP(currView, viewTracker->getLandmarkBook());
+            
+            // re-extract features
             featureExtractor->reextractFeatures(prevKeyView->getImgs()[0], prevKeyView->getLeftFeatureSet());
             
-            vector<View*> currViews = viewTracker->getViews();
-            for(int j = keyFrames.back() - 1; j < currViews.size() - 1; j++)
-            {
-                View* v1 = currViews[j], *v2 = currViews[j + 1];
-                featureTracker->kltTrack(v1->getImgs()[0], v2->getImgs()[0], v1->getLeftFeatureSet(), v2->getLeftFeatureSet(), false);
-            }
-            // refine (Lowe's)
-            View* v1 = currViews[keyFrames.back() - 1], *v2 = currViews.back();
-            featureTracker->refineTrackedFeatures(v1->getImgs()[0], v2->getImgs()[0], v1->getLeftFeatureSet(), v2->getLeftFeatureSet(), v2->getLeftFeatureSet().getIds(), false);
+            int lastKeyFrame = keyFrames.back() - 1;
+            vector<View*>::iterator start = viewTracker->getViews().begin() + lastKeyFrame,
+                                    end = viewTracker->getViews().end();
+            
+            vector<View*> viewsFromLastKeyView(start, end);
+            featureTracker->trackAndMatch(viewsFromLastKeyView);
+            
+            // compute up-to-scale pose here
+            // only to eliminate outliers based on epipolar geometry
+            
+            // pay attention that estimatePose func modifies views
+            // both in features and pose (thus have to set it back afterwards)
+            Mat tmp = currView->getPose();
+            poseEstimator->estimatePose(prevKeyView, currView);
+            currView->setPose(tmp);
+            
             viewTracker->computeLandmarks(false);
             keyFrames.push_back(i);
+            
+            // refine landmarks
+//            viewTracker->bundleAdjust(MOTION_STRUCTURE, GLOBAL_BA);
+//            cout << currView->getT() << endl;
+            
             cout << "KEYFRAME: features increased to: " << currView->getLeftFeatureSet().size() <<  endl;
         }
+        
         // 4. update view
         prevView = currView;
         // update Tr

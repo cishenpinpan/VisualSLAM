@@ -17,11 +17,11 @@
 #ifndef SystemParameters_h
 #define SystemParameters_h
 
-#define FEATURE_NAME "ORB"
-#define DESCRIPTOR_NAME "ORB"
+#define FEATURE_NAME "SURF"
+#define DESCRIPTOR_NAME "SURF"
 #define FEATURE_REDETECTION_TRIGGER 100
 
-#define NUM_POSES 500
+#define NUM_POSES 200
 #define BUNDLE_ADJUSTMENT_LENGTH 5
 #define KEYFRAME_INTERVAL 5
 

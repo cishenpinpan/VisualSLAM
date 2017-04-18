@@ -437,7 +437,7 @@ Mat PoseEstimator::solvePnP(View *v, map<long, Landmark> &landmarkBook)
     const Mat distCoeffs = CameraParameters::getDistCoeff();
     Mat R, Rvec, t;
     Mat status;
-    solvePnPRansac(landmarks, imagePoints, cameraMatrix, distCoeffs, Rvec, t, false, 100, 5.0, 0.9, status, CV_EPNP);
+    solvePnPRansac(landmarks, imagePoints, cameraMatrix, distCoeffs, Rvec, t, false, 100, 5.0, 0.99, status, CV_EPNP);
     Rodrigues(Rvec, R);
     Mat pose = Converter::rotationTranslationToPose(R, t);
     pose = pose.inv();
@@ -445,9 +445,9 @@ Mat PoseEstimator::solvePnP(View *v, map<long, Landmark> &landmarkBook)
     // reject outliers
     vector<KeyPoint> newFeatures;
     vector<long> newIds;
-    if(status.rows < 0.6 * v->getLeftFeatureSet().size())
+    if(status.rows < 0.3 * v->getLeftFeatureSet().size())
     {
-        cout << "insufficient inliers. " << endl;
+        cout << "insufficient inliers: " << status.rows << "/" << v->getLeftFeatureSet().size() << endl;
         return pose.clone();
     }
     for(int i = 0; i < status.rows; i++)
