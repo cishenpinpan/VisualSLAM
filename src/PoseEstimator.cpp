@@ -40,15 +40,13 @@ void evaluateReprojectionError(const double *par, const int nEqs, const void *da
         double reprojectionError = sqrt(err.first * err.first + err.second * err.second);
         totalError += reprojectionError;
     }
-    cout << "total error: " << totalError << endl;
-     
 }
      
 
 Mat PoseEstimator::solveScalePnP(View *v, const Mat prevPose, map<long, Landmark> landmarkBook, double initial)
 {
     // variable
-    double lambda;
+    double lambda = initial;
 
     double *par = &lambda;
     
@@ -82,7 +80,6 @@ Mat PoseEstimator::solveScalePnP(View *v, const Mat prevPose, map<long, Landmark
     relativePose.col(3).rowRange(0, 3) = lambda * relativePose.col(3).rowRange(0, 3);
     const Mat currPose = prevPose * relativePose;
     v->setPose(currPose);
-    
     return v->getPose();
 }
 
@@ -384,47 +381,47 @@ void computeReprojectionErrorFourFrames(const void *data, const double lambda, d
     for(map<long, vector<KeyPoint>>::iterator it = commonFeatures.begin(); it != commonFeatures.end(); it++)
     {
         bool isInlier = true;
+        double averageReprojErr = 0.0;
         totalCount++;
         long id = it->first;
         KeyPoint kp_v1 = it->second[0], kp_v2 = it->second[1], kp_v3 = it->second[2], kp_v4 = it->second[3];
         Point3d p3d = landmarkBook[id].getPoint();
         pair<double, double> err = {0.0, 0.0};
         err = reproject3DPoint(p3d, pose_v1, kp_v1, false);
-        if(sqrt(err.first * err.first + err.second * err.second) > 5.0)
-            isInlier = false;
         if(fvec != NULL)
         {
             *(fvec++) = err.first;
             *(fvec++) = err.second;
         }
         totalError += (err.first * err.first + err.second * err.second);
+        averageReprojErr += sqrt(err.first * err.first + err.second * err.second);
         err = reproject3DPoint(p3d, pose_v2, kp_v2, false);
-        if(sqrt(err.first * err.first + err.second * err.second) > 5.0)
-            isInlier = false;
         if(fvec != NULL)
         {
             *(fvec++) = err.first;
             *(fvec++) = err.second;
         }
         totalError += (err.first * err.first + err.second * err.second);
+        averageReprojErr += sqrt(err.first * err.first + err.second * err.second);
         err = reproject3DPoint(p3d, pose_v3, kp_v3, false);
-        if(sqrt(err.first * err.first + err.second * err.second) > 5.0)
-            isInlier = false;
         if(fvec != NULL)
         {
             *(fvec++) = err.first;
             *(fvec++) = err.second;
         }
         totalError += (err.first * err.first + err.second * err.second);
+        averageReprojErr += sqrt(err.first * err.first + err.second * err.second);
         err = reproject3DPoint(p3d, pose_v4, kp_v4, false);
-        if(sqrt(err.first * err.first + err.second * err.second) > 5.0)
-            isInlier = false;
         if(fvec != NULL)
         {
             *(fvec++) = err.first;
             *(fvec++) = err.second;
         }
         totalError += (err.first * err.first + err.second * err.second);
+        averageReprojErr += sqrt(err.first * err.first + err.second * err.second);
+        averageReprojErr /= 4;
+        if(averageReprojErr > 5.0)
+            isInlier = false;
         if(isInlier)
             inlierCount++;
     }

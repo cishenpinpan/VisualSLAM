@@ -165,7 +165,7 @@ void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtract
             poseEstimator->estimatePose(prevKeyView, currView, scalePrior);
             //    - optimize scale within three frames
             poseEstimator->solveScalePnP(currView, prevKeyView->getPose(), localViewTracker->getLandmarkBook());
-            
+
             // 2. quadruple
             vector<View*> fourKeyViews = viewTracker->getLastNKeyViews(4);
             if(!fourKeyViews.empty())
@@ -175,7 +175,7 @@ void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtract
                 // landmarks from k2 and k3 need re-computation now
                 viewTracker->refineLandmarks(fourKeyViews[1], fourKeyViews[2]);
             }
-
+            cout << currView->getT() << endl;
             // 5. re-generate new landmarks
             viewTracker->computeLandmarks(false);
             keyFrames.push_back(i);
