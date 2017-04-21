@@ -58,9 +58,7 @@ View::View(View* v)
 
 View::~View()
 {
-    deleteImgs();
-    idBook.clear();
-    pose.release();
+    
 }
 long View::getId()
 {

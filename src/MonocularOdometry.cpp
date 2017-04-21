@@ -54,8 +54,11 @@ void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtract
     // set first view as key view
     viewTracker->setKeyView(prevView);
     keyFrames.push_back(0);
-    
     Trs.push_back(Tr.clone());
+    
+    // build a local key view tracker
+    ViewTracker *localViewTracker = new ViewTracker();
+    localViewTracker->addView(prevView);
     
     for(int i = 2; i < NUM_POSES; i++)
     {
@@ -83,9 +86,9 @@ void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtract
             featureTracker->trackAndMatch(currViews);
             
             Mat poseChange = poseEstimator->estimatePose(prevView, currView);
-            poseChange.at<double>(0, 3) = poseChange.at<double>(0, 3) * 3.0;
-            poseChange.at<double>(1, 3) = poseChange.at<double>(1, 3) * 3.0;
-            poseChange.at<double>(2, 3) = poseChange.at<double>(2, 3) * 3.0;
+            poseChange.at<double>(0, 3) = poseChange.at<double>(0, 3) * 2.7;
+            poseChange.at<double>(1, 3) = poseChange.at<double>(1, 3) * 2.7;
+            poseChange.at<double>(2, 3) = poseChange.at<double>(2, 3) * 2.7;
             Tr = Tr * poseChange;
             cout << Tr.col(3).rowRange(0, 3) << endl;
             currView->setPose(Tr);
@@ -93,22 +96,30 @@ void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtract
             viewTracker->computeLandmarks(true);
             keyFrames.push_back(i);
             viewTracker->bundleAdjust(MOTION_STRUCTURE, GLOBAL_BA);
+            
+            // local keyview tracker
+            localViewTracker->addView(currView);
+            localViewTracker->computeLandmarks(true);
+            localViewTracker->bundleAdjust(MOTION_STRUCTURE, GLOBAL_BA);
         }
         else
         {
             
             featureTracker->kltTrack(prevView->getImgs()[0], currView->getImgs()[0],
                                      prevView->getLeftFeatureSet(), currView->getLeftFeatureSet(), false);
-            
-            // 3. estimate pose from PnP (motion-only BA)
-            poseEstimator->solvePnP(currView, viewTracker->getLandmarkBook());
-            
-            // refine landmarks
-            cout << currView->getT() << endl;
-            viewTracker->bundleAdjust(STRUCTURE_ONLY, LOCAL_BA);
-            
-            Tr = currView->getPose();
-            cout << Tr.col(3).rowRange(0, 3) << endl;
+//
+//            // 3. estimate pose from PnP (motion-only BA)
+//            double inliers = poseEstimator->solvePnP(currView, viewTracker->getLandmarkBook());
+//            // refine landmarks
+//            // viewTracker->bundleAdjust(STRUCTURE_ONLY, LOCAL_BA);
+//            if(inliers < 0.7)
+//            {
+//                cout << "inliers before BA: " << inliers * 100 << "%" << endl;
+//                double inliers = poseEstimator->solvePnP(currView, viewTracker->getLandmarkBook());
+//                cout << "inliers after BA: " << inliers * 100 << "%" << endl;
+//            }
+//            Tr = currView->getPose();
+//            cout << Tr.col(3).rowRange(0, 3) << endl;
         }
         
         cout << "features:" << currView->getLeftFeatureSet().size() << endl;
@@ -124,42 +135,64 @@ void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtract
         // insert new keyframe when
         // 1. #KEYFRAME_INTERVAL frames has passed
         // 2. #features has dropped below the threshold
-        if(((i != 0 && i - keyFrames.back() >= KEYFRAME_INTERVAL) &&
-            currView->getLeftFeatureSet().size() < 0.7 * lastKeyView->getLeftFeatureSet().size()) ||
-            currView->getLeftFeatureSet().size() < 50)
+        if(currView->getLeftFeatureSet().size() < 0.9 * lastKeyView->getLeftFeatureSet().size() ||
+            currView->getLeftFeatureSet().size() < FEATURE_REDETECTION_TRIGGER)
         {
+            // 1. triplet
+            //    - a) track down features in local key view tracker
+            //    - b) PnP to solve for lambda (using local landmarks)
+            //    - c) epipolar geometry to solve for orientation
+            
+            // a) track features
+            View* prevKeyView = localViewTracker->getLastView();
+            featureTracker->refineTrackedFeatures(prevKeyView->getImgs()[0], currView->getImgs()[0], prevKeyView->getLeftFeatureSet(), currView->getLeftFeatureSet(), false);
+            // viewTracker->bundleAdjust(STRUCTURE_ONLY, LOCAL_BA);
             viewTracker->setKeyView(currView);
-            // refine the frame before nominating it as a keyframe
-            View* prevKeyView = viewTracker->getLastTwoKeyViews().front(),
-                    currKeyView = viewTracker->getLastTwoKeyViews().back();
-            featureTracker->refineTrackedFeatures(prevKeyView->getImgs()[0], currView->getImgs()[0], prevKeyView->getLeftFeatureSet(), prevKeyView->getLeftFeatureSet(), false);
-            poseEstimator->solvePnP(currView, viewTracker->getLandmarkBook());
-            
-            // re-extract features
+            localViewTracker->addView(currView);
+            // b) PnP solves lambda of relative pose from last keyframe
+            //    - a scale prior from classic PnP
+            poseEstimator->solvePnP(currView, localViewTracker->getLandmarkBook());
+            Mat relativePose = prevKeyView->getPose().inv() * currView->getPose();
+            double scalePrior = norm(relativePose.col(3).rowRange(0, 3));
+            //    - re-extract features
             featureExtractor->reextractFeatures(prevKeyView->getImgs()[0], prevKeyView->getLeftFeatureSet());
-            
             int lastKeyFrame = keyFrames.back() - 1;
             vector<View*>::iterator start = viewTracker->getViews().begin() + lastKeyFrame,
-                                    end = viewTracker->getViews().end();
-            
+            end = viewTracker->getViews().end();
             vector<View*> viewsFromLastKeyView(start, end);
             featureTracker->trackAndMatch(viewsFromLastKeyView);
+            //    - and estimate essential matrix
+            poseEstimator->estimatePose(prevKeyView, currView, scalePrior);
+            //    - optimize scale within three frames
+            poseEstimator->solveScalePnP(currView, prevKeyView->getPose(), localViewTracker->getLandmarkBook());
             
-            // compute up-to-scale pose here
-            // only to eliminate outliers based on epipolar geometry
-            
-            // pay attention that estimatePose func modifies views
-            // both in features and pose (thus have to set it back afterwards)
-            Mat tmp = currView->getPose();
-            poseEstimator->estimatePose(prevKeyView, currView);
-            currView->setPose(tmp);
-            
+            // 2. quadruple
+            vector<View*> fourKeyViews = viewTracker->getLastNKeyViews(4);
+            if(!fourKeyViews.empty())
+            {
+                // refine scale factor
+                poseEstimator->refineScale(fourKeyViews, viewTracker->getLandmarkBook());
+                // landmarks from k2 and k3 need re-computation now
+                viewTracker->refineLandmarks(fourKeyViews[1], fourKeyViews[2]);
+            }
+
+            // 5. re-generate new landmarks
             viewTracker->computeLandmarks(false);
             keyFrames.push_back(i);
             
+            // 6. update local keyView tracker
+            localViewTracker->eraseLandmarks();
+            localViewTracker->popFirstView();
+            localViewTracker->computeLandmarks(true);
+            
+            vector<Point2f> ps1, ps2;
+            ps1 = Converter::keyPointsToPoint2fs(prevKeyView->getLeftFeatureSet().getFeaturePoints());
+            ps2 = Converter::keyPointsToPoint2fs(currView->getLeftFeatureSet().getFeaturePoints());
+            Canvas canvas;
+            // canvas.drawFeatureMatches(prevKeyView->getImgs()[0], currView->getImgs()[0], ps1, ps2);
             // refine landmarks
-//            viewTracker->bundleAdjust(MOTION_STRUCTURE, GLOBAL_BA);
-//            cout << currView->getT() << endl;
+            // viewTracker->bundleAdjust(MOTION_STRUCTURE, GLOBAL_BA);
+            // cout << currView->getT() << endl;
             
             cout << "KEYFRAME: features increased to: " << currView->getLeftFeatureSet().size() <<  endl;
         }

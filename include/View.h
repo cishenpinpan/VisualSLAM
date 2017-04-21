@@ -51,6 +51,7 @@ public:
     void setGroundTruth(const Mat _gt);
     Mat getGroundTruth();
     void setKeyView(){keyView = true;}
+    bool isKeyView(){return keyView;}
 private:
     long id;
     bool keyView;

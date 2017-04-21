@@ -53,10 +53,14 @@ public:
     void bundleAdjust(int option, bool global);
     void bundleAdjustMotionOnly();
     void computeLandmarks(bool initial);
+    void eraseLandmarks();
+    void refineLandmarks(View *v1, View *v2);
     map<long, Landmark>& getLandmarkBook(){return landmarkBook;}
     View* getLastView();
     View* getLastKeyView(){return keyViews.back();}
     vector<View*> getLastTwoKeyViews(){return {keyViews[keyViews.size() - 2], keyViews.back()};}
+    vector<View*> getLastNKeyViews(int N);
+    View* popFirstView();
     View* popLastView();
     void setKeyView(View *v);
 private:

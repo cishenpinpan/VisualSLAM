@@ -54,18 +54,21 @@ public:
 class Landmark
 {
 public:
-    Landmark(const Landmark &l){point3d = Point3d(l.point3d); id = l.id; from = l.from; descriptor = l.descriptor.clone();}
+    Landmark(const Landmark &l){point3d = Point3d(l.point3d); id = l.id; from = l.from; descriptor = l.descriptor.clone(); inlier = l.inlier;}
     Landmark(Point3d _point3d, long _id, pair<long, long> _from) : point3d(_point3d), id(_id), from(_from){};
     Landmark(){point3d = Point3d(0, 0, 0); id = -1; from = {-1, -1};}
     Point3d point3d;
     long id;
     pair<long, long> from;
     Mat descriptor;
+    bool inlier = true;
     
     Point3d getPoint(){return point3d;}
     void setPoint(const Point3d &_point3d){point3d = Point3d(_point3d);}
     Mat getDescriptor(){return descriptor.clone();}
     void setDescriptor(const Mat _descriptor){descriptor = _descriptor.clone();}
+    bool isInlier(){return inlier;}
+    void setInlier(bool _inlier){inlier = _inlier;}
 };
 
 #endif /* Feature_h */

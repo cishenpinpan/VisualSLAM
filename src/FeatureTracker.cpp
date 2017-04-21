@@ -60,8 +60,8 @@ void FeatureTracker::kltTrack(Mat img1, Mat img2, FeatureSet& featureSet1, Featu
         }
     }
     
-    featureSet1.setFeaturePoints(newFeatures1);
-    featureSet1.setIds(newIds);
+    // featureSet1.setFeaturePoints(newFeatures1);
+    // featureSet1.setIds(newIds);
     featureSet2.setFeaturePoints(newFeatures2);
     featureSet2.setIds(newIds);
     
@@ -104,7 +104,7 @@ void FeatureTracker::refineTrackedFeatures
     }
     
     vector<KeyPoint> newKeyPoints1, newKeyPoints2;
-    vector<long> prevIds = featureSet1.getIds(), newIds;
+    vector<long> prevIds = featureSet2.getIds(), newIds;
     int winSize = 2;
     
     //For each feature track Search keypoints in the neighborhood of tracked points in last view
@@ -164,15 +164,26 @@ void FeatureTracker::refineTrackedFeatures
             newKeyPoints1.push_back(p1);
             newKeyPoints2.push_back(bestMatch.first);
             newIds.push_back(id);
+            if(c-- >= 0)
+            {
+//                vector<KeyPoint> tempKps1, tempKps2;
+//                vector<Point2f> ps1, ps2;
+//                tempKps1.push_back(p1);
+//                tempKps2.push_back(bestMatch.first);
+//                KeyPoint::convert(tempKps1, ps1);
+//                KeyPoint::convert(tempKps2, ps2);
+//                Canvas canvas;
+//                canvas.drawFeatureMatches(img1, img2, ps1, ps2); 
+            }
         }
         
     }
 //    std::cout <<"Num after refine 1: " << newKeyPoints1.size()	 << std::endl;
 //    std::cout <<"Num after refine 2: " << newKeyPoints2.size() << std::endl;
-//    canvas.drawTrackingPathEveryOtherK(img1, newKeyPoints1, newKeyPoints2,10);
-    featureSet1.setFeaturePoints(newKeyPoints1);
+//    canvas.drawTrackingPathEveryOtherK(img1, newKeyPoints1, newKeyPoints2,1);
+    // featureSet1.setFeaturePoints(newKeyPoints1);
+    // featureSet1.setIds(newIds);
     featureSet2.setFeaturePoints(newKeyPoints2);
-    featureSet1.setIds(newIds);
     featureSet2.setIds(newIds);
     
 }
@@ -189,10 +200,7 @@ void FeatureTracker::trackAndMatch(vector<View*> views)
     }
     // refine (Lowe's)
     View *v1 = views[0], *v2 = views.back();
-    cout << v2->getLeftFeatureSet().size();
-    cout << "->";
     refineTrackedFeatures(v1->getImgs()[0], v2->getImgs()[0], v1->getLeftFeatureSet(), v2->getLeftFeatureSet(), false);
-    cout << v2->getLeftFeatureSet().size();
 }
 
 // search for 2d features from landmarks

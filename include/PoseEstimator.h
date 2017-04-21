@@ -10,6 +10,8 @@
 #define PoseEstimator_h
 
 #include <stdio.h>
+#include <time.h>
+#include <stdlib.h>
 #include "lmmin.h"
 #include <opencv2/opencv.hpp>
 #include "opencv2/core.hpp"
@@ -45,21 +47,18 @@ using namespace std;
 using namespace cv;
 using namespace Eigen;
 
-struct DataStruct
+struct ScaleEstimatorStruct
 {
-    View *v1, *v2;
-    vector<Point3d> points3D;
-    Mat R, T;
-    double error, iterations;
-    DataStruct(View *_v1, View *_v2, Mat _R, Mat _T, vector<Point3d> _points3D)
+    View *v;
+    Mat prevPose;
+    vector<KeyPoint> keyPoints;
+    vector<Point3d> landmarks;
+    ScaleEstimatorStruct(View *_v, const Mat _prevPose, vector<KeyPoint> _keyPoints, vector<Point3d> _landmarks)
     {
-        v1 = _v1;
-        v2 = _v2;
-        R = _R;
-        T = _T;
-        points3D = _points3D;
-        error = 0.0;
-        iterations = 0;
+        v = _v;
+        prevPose = _prevPose;
+        keyPoints = _keyPoints;
+        landmarks = _landmarks;
     }
 };
 struct TrinocularDataStruct
@@ -77,17 +76,37 @@ struct TrinocularDataStruct
         end = _e;
     }
 };
+struct ScaleRefinementDataStruct
+{
+    View *v1, *v2, *v3, *v4;
+    map<long, vector<KeyPoint>> commonFeatures;
+    map<long, Landmark> landmarkBook;
+    double error, inlier;
+    ScaleRefinementDataStruct(View *_v1, View *_v2, View *_v3, View *_v4,
+                              map<long, Landmark> _landmarkBook, map<long, vector<KeyPoint> > _commonFeatures)
+    {
+        v1 = _v1;
+        v2 = _v2;
+        v3 = _v3;
+        v4 = _v4;
+        landmarkBook = _landmarkBook;
+        commonFeatures = _commonFeatures;
+        error = 0.0;
+        inlier = 1.0;
+    }
+};
 class PoseEstimator
 {
 public:
     PoseEstimator();
-    Mat estimatePose(View *v1, View *v2);
-    double estimateScale(View *v1, View *v2);
+    Mat estimatePose(View *v1, View *v2, double lambda = 1.0);
     Mat estimatePoseByTrinocular(View *v1, View *v2, View *v);
     Mat estimatePoseMotionOnlyBA(View *v1, View *v2, map<long, Landmark> landmarkBook);
-    Mat solvePnP(View *v, map<long, Landmark> &landmarkBook);
+    double solvePnP(View *v, map<long, Landmark> &landmarkBook);
+    Mat solveScalePnP(View *v, const Mat prevPose,  map<long, Landmark> landmarkBook, double initial = 1.0);
+    void refineScale(vector<View*> views, map<long, Landmark> &landmarkBook);
 private:
-    Mat estimatePoseMono(View *v1, View *v2);
+    Mat estimatePoseMono(View *v1, View *v2, double lambda = 1.0);
     FeatureExtractor *featureExtractor;
     FeatureTracker *featureTracker;
     void rejectOutliers(View *v1, View *v2, Mat status);

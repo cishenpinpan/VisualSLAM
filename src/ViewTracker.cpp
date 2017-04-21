@@ -22,12 +22,17 @@ void ViewTracker::addView(View *v)
 {
     views.push_back(v);
     viewBook[v->getId()] = v;
+    if(v->isKeyView())
+        keyViews.push_back(v);
     
 }
 void ViewTracker::setKeyView(View *v)
 {
-    keyViews.push_back(v);
-    v->setKeyView();
+    if(!v->isKeyView())
+    {
+        v->setKeyView();
+        keyViews.push_back(v);
+    }
 }
 void ViewTracker::computeLandmarks(bool initial)
 {
@@ -95,6 +100,47 @@ void ViewTracker::computeLandmarks(bool initial)
     }
     
 }
+void ViewTracker::eraseLandmarks()
+{
+    landmarkBook.clear();
+}
+void ViewTracker::refineLandmarks(View *v1, View *v2)
+{
+    // for each common feature
+    // refine its 3d location in landmark book
+    map<long, vector<KeyPoint> > commonFeatures;
+    FeatureSet featureSet_v1 = v1->getLeftFeatureSet();
+    FeatureSet featureSet_v2 = v2->getLeftFeatureSet();
+    for(int i = 0; i < featureSet_v1.size(); i++)
+    {
+        long id = featureSet_v1.getIds()[i];
+        commonFeatures[id].push_back(featureSet_v1.getFeaturePoints()[i]);
+    }
+    for(int i = 0; i < featureSet_v2.size(); i++)
+    {
+        long id = featureSet_v2.getIds()[i];
+        commonFeatures[id].push_back(featureSet_v2.getFeaturePoints()[i]);
+    }
+    // remove in-common features
+    for(map<long, vector<KeyPoint>>::iterator it = commonFeatures.begin(); it != commonFeatures.end(); )
+    {
+        long id = it->first;
+        if(it->second.size() < 2)
+            it = commonFeatures.erase(it);
+        else
+            it++;
+    }
+    for(map<long, vector<KeyPoint> >::iterator it = commonFeatures.begin();
+        it != commonFeatures.end(); it++)
+    {
+        long id = it->first;
+        KeyPoint kp_v1 = it->second[0], kp_v2 = it->second[1];
+        // triangulate
+        Point3d p3d;
+        triangulatePoint(v1->getPose(), v2->getPose(), kp_v1, kp_v2, p3d);
+        landmarkBook[id].setPoint(p3d);
+    }
+}
 
 vector<View*> ViewTracker::getViews()
 {
@@ -104,14 +150,31 @@ View* ViewTracker::getLastView()
 {
     return views.back();
 }
-
+View* ViewTracker::popFirstView()
+{
+    View* temp = views.front();
+    views = vector<View*>(views.begin() + 1, views.end());
+    if(temp->isKeyView())
+        keyViews = vector<View*>(keyViews.begin() + 1, keyViews.end());
+    return temp;
+}
 View* ViewTracker::popLastView()
 {
     View* temp = views.back();
     views.erase(views.end() - 1);
     return temp;
 }
-
+vector<View*> ViewTracker::getLastNKeyViews(int N)
+{
+    vector<View*> res;
+    if(keyViews.size() < N)
+        return res;
+    for(int i = keyViews.size() - N; i < keyViews.size(); i++)
+    {
+        res.push_back(keyViews[i]);
+    }
+    return res;
+}
 void ViewTracker::bundleAdjust(int option, bool global)
 {
     vector<View*> viewsForBA;
