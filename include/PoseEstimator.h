@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
+#include <algorithm>
 #include "lmmin.h"
 #include <opencv2/opencv.hpp>
 #include "opencv2/core.hpp"
@@ -39,6 +40,7 @@
 #include "Utility.h"
 #include "Canvas.h"
 #include "Converter.h"
+#include "ViewTracker.h"
 #include "SystemParameters.h"
 //#include <cvsba/cvsba.h>
 #include <set>
@@ -53,12 +55,16 @@ struct ScaleEstimatorStruct
     Mat prevPose;
     vector<KeyPoint> keyPoints;
     vector<Point3d> landmarks;
+    vector<bool> status;
+    double inlierRatio;
     ScaleEstimatorStruct(View *_v, const Mat _prevPose, vector<KeyPoint> _keyPoints, vector<Point3d> _landmarks)
     {
         v = _v;
         prevPose = _prevPose;
         keyPoints = _keyPoints;
         landmarks = _landmarks;
+        status = vector<bool>(keyPoints.size(), true);
+        inlierRatio = 0.0;
     }
 };
 struct TrinocularDataStruct
@@ -82,6 +88,7 @@ struct ScaleRefinementDataStruct
     map<long, vector<KeyPoint>> commonFeatures;
     map<long, Landmark> landmarkBook;
     double error, inlier;
+    set<long> inlierList;
     ScaleRefinementDataStruct(View *_v1, View *_v2, View *_v3, View *_v4,
                               map<long, Landmark> _landmarkBook, map<long, vector<KeyPoint> > _commonFeatures)
     {
@@ -102,13 +109,16 @@ public:
     Mat estimatePose(View *v1, View *v2, double lambda = 1.0);
     Mat estimatePoseByTrinocular(View *v1, View *v2, View *v);
     Mat estimatePoseMotionOnlyBA(View *v1, View *v2, map<long, Landmark> landmarkBook);
-    double solvePnP(View *v, map<long, Landmark> &landmarkBook);
-    Mat solveScalePnP(View *v, const Mat prevPose,  map<long, Landmark> landmarkBook, double initial = 1.0);
-    void refineScale(vector<View*> views, map<long, Landmark> &landmarkBook);
+    Mat solvePnP(View *v, map<long, Landmark> landmarkBook);
+    double solveScaleDist(View *v1, View* v2, View* v3, map<long, Landmark> landmarkBook, double initial = 1.0);
+    double solveScalePnP(View *v, const Mat prevPose,  map<long, Landmark> landmarkBook, double initial = 1.0);
+    double solveScalePnPRANSAC(View *v, const Mat prevPose,  map<long, Landmark> landmarkBook, double initial = 1.0);
+    double refineScale(vector<View*> views, map<long, Landmark> &landmarkBook);
+    double refineScaleRANSAC(vector<View*> views, map<long, Landmark> &landmarkBook);
+    void refineScaleMultipleFrames(vector<View*> views, int N);
+    void refineScaleStereo(vector<View*> views);
 private:
     Mat estimatePoseMono(View *v1, View *v2, double lambda = 1.0);
-    FeatureExtractor *featureExtractor;
-    FeatureTracker *featureTracker;
     void rejectOutliers(View *v1, View *v2, Mat status);
 };
 #endif /* PoseEstimator_h */

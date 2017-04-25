@@ -8,26 +8,27 @@
 
 #include "View.h"
 
-View::View(const vector<Mat> _imgs)
+View::View(const vector<Mat> _imgs, int _time)
 {
     imgs = vector<Mat>();
     for(int i = 0; i < _imgs.size(); i++)
     {
-        imgs.push_back(_imgs[i]);
+        imgs.push_back(_imgs[i].clone());
     }
     idBook = map<long, int>();
     stereo = imgs.size() == 2 ? true : false;
     IdGenerator *idGenerator = IdGenerator::createInstance();
     id = idGenerator->next();
+    time = _time;
     keyView = false;
 }
 
-View::View(const vector<Mat> _imgs, const FeatureSet _leftFeatureSet)
+View::View(const vector<Mat> _imgs, const FeatureSet _leftFeatureSet, int _time)
 {
     imgs = vector<Mat>();
     for(int i = 0; i < _imgs.size(); i++)
     {
-        imgs.push_back(_imgs[i]);
+        imgs.push_back(_imgs[i].clone());
     }
 
     leftFeatureSet = _leftFeatureSet;
@@ -40,10 +41,11 @@ View::View(const vector<Mat> _imgs, const FeatureSet _leftFeatureSet)
     stereo = imgs.size() == 2 ? true : false;
     IdGenerator *idGenerator = IdGenerator::createInstance();
     id = idGenerator->next();
+    time = _time;
     keyView = false;
 }
 
-View::View(View* v)
+View::View(View* v, int _time)
 {
     imgs = v->getImgs();
     leftFeatureSet = v->getLeftFeatureSet();
@@ -53,12 +55,13 @@ View::View(View* v)
     stereo = imgs.size() == 2 ? true : false;
     IdGenerator *idGenerator = IdGenerator::createInstance();
     id = idGenerator->next();
+    time = _time;
     keyView = false;
 }
 
 View::~View()
 {
-    
+    cout << "destructor!!!!" << endl;
 }
 long View::getId()
 {
@@ -66,10 +69,10 @@ long View::getId()
 }
 vector<Mat> View::getImgs()
 {
-    vector<Mat> _imgs = vector<Mat>();
+    vector<Mat> _imgs;
     for(int i = 0; i < imgs.size(); i++)
     {
-        _imgs.push_back(imgs[i]);
+        _imgs.push_back(imgs[i].clone());
     }
     return _imgs;
 }
@@ -78,7 +81,7 @@ void View::setImgs(const vector<Mat> _imgs)
     imgs = vector<Mat>();
     for(int i = 0; i < _imgs.size(); i++)
     {
-        imgs.push_back(_imgs[i]);
+        imgs.push_back(_imgs[i].clone());
     }
 
 }

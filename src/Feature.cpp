@@ -20,17 +20,17 @@ void FeatureSet::addFeature(Feature feature)
 }
 Feature FeatureSet::getFeatureById(long id)
 {
-    for(int i = 0; i < ids.size(); i++)
-    {
-        if(ids[i] == id)
-            return Feature(featurePoints[i], id);
-    }
-    return NULL;
+    if(!idLookup.count(id))
+        return NULL;
+    int index = idLookup[id];
+    return Feature(featurePoints[index], ids[index]);
+    
 }
 void FeatureSet::addFeature(KeyPoint point2d, long id)
 {
     featurePoints.push_back(point2d);
     ids.push_back(id);
+    idLookup[id] = ids.size() - 1;
 }
 void FeatureSet::removeFeature(const long id)
 {
@@ -53,10 +53,15 @@ int FeatureSet::size()
 }
 bool FeatureSet::hasId(long id)
 {
+    return idLookup.count(id);
+}
+void FeatureSet::setIds(const vector<long> _ids)
+{
+    ids = vector<long int>(_ids);
+    // update id lookup
+    idLookup.clear();
     for(int i = 0; i < ids.size(); i++)
     {
-        if(ids[i] == id)
-            return true;
+        idLookup[ids[i]] = i;
     }
-    return false;
 }

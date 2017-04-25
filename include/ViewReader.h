@@ -34,6 +34,7 @@ private:
     string track;
     bool stereo;
     int index;
+    string left_right;
 };
 
 #endif /* ViewReader_h */

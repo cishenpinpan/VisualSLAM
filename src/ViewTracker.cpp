@@ -40,7 +40,6 @@ void ViewTracker::computeLandmarks(bool initial)
     View *prevView = keyViews[keyViews.size() - 2];
     View *currView = keyViews.back();
     Canvas *canvas = new Canvas();
-    vector<long> idToRemovePrev, idToRemoveCurr;
     vector<double> depths;
     for(int i = 0; i < currView->getLeftFeatureSet().size(); i++)
     {
@@ -54,14 +53,16 @@ void ViewTracker::computeLandmarks(bool initial)
         
         triangulatePoint(prevView->getPose(), currView->getPose(),
                          prevFeature.getPoint(), currFeature.getPoint(), point3d);
+//        vector<Point3d> tmp;
+//        vector<KeyPoint> kps1, kps2;
+//        vector<Point2f> ps1, ps2;
+//        kps1.push_back(prevFeature.getPoint());
+//        kps2.push_back(currFeature.getPoint());
+//        KeyPoint::convert(kps1, ps1);
+//        KeyPoint::convert(kps2, ps2);
+//        triangulatePoints(prevView->getPose(), prevView->getPose().inv() * currView->getPose(), ps1, ps2, tmp);
+//        point3d = tmp[0];
         Landmark *landmark = new Landmark(point3d, id, {prevView->getId(), currView->getId()});
-        // compute descriptor
-        Ptr<SURF> extractor = SURF::create();
-        Mat descriptor;
-        vector<KeyPoint> tmp;
-        tmp.push_back(currFeature.getPoint());
-        extractor->compute(currView->getImgs()[0], tmp, descriptor);
-        landmark->setDescriptor(descriptor);
         // reproject 3d point
         // add to landmark book if this feature is not yet triangulated
         if(!landmarkBook.count(id))
@@ -70,35 +71,55 @@ void ViewTracker::computeLandmarks(bool initial)
             pair<double, double> err2 = reproject3DPoint(point3d, currView->getPose(), currFeature.getPoint(), false);
             double l2NormError = sqrt(err.first * err.first + err.second * err.second);
             double l2NormError2 = sqrt(err2.first * err2.first + err2.second * err2.second);
-            if(l2NormError < REPROJECTION_THRESHOLD && l2NormError2 < REPROJECTION_THRESHOLD)
+            if(l2NormError < 1 && l2NormError2 < 1)
             {
                 landmarkBook.insert(make_pair(id, *landmark));
             }
-            else
+        }
+    }
+}
+void ViewTracker::computeLandmarksStereo()
+{
+    // triangulate feature correspondences in keyframes and update landmark book
+    View *firstView = views.front();
+    Canvas *canvas = new Canvas();
+    vector<double> depths;
+    for(int i = 0; i < firstView->getLeftFeatureSet().size(); i++)
+    {
+        KeyPoint leftKp = firstView->getLeftFeatureSet().getFeaturePoints()[i];
+        long id = firstView->getLeftFeatureSet().getIds()[i];
+        if(!firstView->getRightFeatureSet().hasId(id))
+            continue;
+        KeyPoint rightKp = firstView->getRightFeatureSet().getFeatureById(id).getPoint();
+//        canvas->drawFeatureMatches(firstView->getImgs()[0], firstView->getImgs()[1], {leftKp}, {rightKp});
+        // triangulate this pair of points
+        Point3d point3d;
+        Mat leftPose = firstView->getPose().clone();
+        Mat rightPose = leftPose * CameraParameters::getStereoPose();
+        triangulatePoint(leftPose, rightPose,
+                         leftKp, rightKp, point3d);
+        Landmark *landmark = new Landmark(point3d, id, {firstView->getId(), firstView->getId()});
+        // compute descriptor
+        Ptr<SURF> extractor = SURF::create();
+        Mat descriptor;
+        vector<KeyPoint> tmp;
+        tmp.push_back(leftKp);
+        extractor->compute(firstView->getImgs()[0], tmp, descriptor);
+        landmark->setDescriptor(descriptor);
+        // reproject 3d point
+        // add to landmark book if this feature is not yet triangulated
+        if(!landmarkBook.count(id))
+        {
+            pair<double, double> err = reproject3DPoint(point3d, leftPose, leftKp, false);
+            pair<double, double> err2 = reproject3DPoint(point3d,  rightPose, rightKp, false);
+            double l2NormError = sqrt(err.first * err.first + err.second * err.second);
+            double l2NormError2 = sqrt(err2.first * err2.first + err2.second * err2.second);
+            if(l2NormError < 1 && l2NormError2 < 1)
             {
-                idToRemovePrev.push_back(id);
-                idToRemoveCurr.push_back(id);
+                landmarkBook.insert(make_pair(id, *landmark));
             }
         }
-        else
-        {
-            point3d = Point3d(landmarkBook[id].point3d);
-            pair<double, double> err = reproject3DPoint(point3d, currView->getPose(), currFeature.getPoint(), false);
-            double l2NormError = sqrt(err.first * err.first + err.second * err.second);
-//            if(l2NormError > REPROJECTION_THRESHOLD)
-//                idToRemoveCurr.push_back(id);
-        }
     }
-    // remove
-    for(int i = 0; i < idToRemovePrev.size(); i++)
-    {
-        prevView->removeLeftFeatureById(idToRemovePrev[i]);
-    }
-    for(int i = 0; i < idToRemoveCurr.size(); i++)
-    {
-        currView->removeLeftFeatureById(idToRemoveCurr[i]);
-    }
-    
 }
 void ViewTracker::eraseLandmarks()
 {
@@ -141,7 +162,18 @@ void ViewTracker::refineLandmarks(View *v1, View *v2)
         landmarkBook[id].setPoint(p3d);
     }
 }
-
+void ViewTracker::updateLandmarks(map<long, Landmark> &ref)
+{
+    for(map<long, Landmark>::iterator it = ref.begin(); it != ref.end(); it++)
+    {
+        long id = it->first;
+        if(landmarkBook.count(id))
+        {
+            // update
+            landmarkBook[id].setPoint(it->second.getPoint());
+        }
+    }
+}
 vector<View*> ViewTracker::getViews()
 {
     return views;
@@ -183,7 +215,8 @@ void ViewTracker::bundleAdjust(int option, bool global)
     else
     {
         viewsForBA = vector<View*>(getLastTwoKeyViews());
-        viewsForBA.push_back(views.back());
+        if(!views.back()->isKeyView())
+            viewsForBA.push_back(views.back());
     }
     if(viewsForBA.size() < 2)
         return ;
@@ -274,13 +307,6 @@ void ViewTracker::bundleAdjust(int option, bool global)
             counts[j - start]++;
             errors[j - start] += l2NormError;
             
-            // draw matches
-            if(l2NormError > 2)
-            {
-                vector<Point2f> p1, p2;
-                KeyPoint::convert({vFrom1->getLeftFeatureSet().getFeatureById(id).getPoint()}, p1);
-                KeyPoint::convert({vFrom2->getLeftFeatureSet().getFeatureById(id).getPoint()}, p2);
-            }
             
         }
     }

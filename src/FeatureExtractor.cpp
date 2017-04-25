@@ -19,7 +19,6 @@ vector<KeyPoint> FeatureExtractor::extractFeatures(Mat img, FeatureSet& featureS
         //detector->setNOctaves(6);
         detector->setNOctaveLayers(10);
         detector->detect(img, keypoints);
-        
     }
     else if (_featureName == "ORB")
     {
@@ -36,10 +35,15 @@ vector<KeyPoint> FeatureExtractor::extractFeatures(Mat img, FeatureSet& featureS
     // remove existing feature points
     featureSet.clear();
     IdGenerator* idGenerator = IdGenerator::createInstance();
+    vector<KeyPoint> newPoints;
+    vector<long> newIds;
     for(int i = 0; i < keypoints.size(); i++)
     {
-        featureSet.addFeature(keypoints[i], idGenerator->next());
+        newPoints.push_back(keypoints[i]);
+        newIds.push_back(idGenerator->next());
     }
+    featureSet.setFeaturePoints(newPoints);
+    featureSet.setIds(newIds);
     return keypoints;
 }
 

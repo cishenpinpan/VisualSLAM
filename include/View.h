@@ -22,10 +22,10 @@ using namespace cv;
 class View
 {
 public:
-    View(View *v);
+    View(View *v, int _time);
     ~View();
-    View(const vector<Mat> _imgs);
-    View(const vector<Mat> _imgs, const FeatureSet _leftFeatureSet);
+    View(const vector<Mat> _imgs, int _time);
+    View(const vector<Mat> _imgs, const FeatureSet _leftFeatureSet, int _time);
     long getId();
     vector<Mat> getImgs();
     void setImgs(const vector<Mat> _imgs);
@@ -52,9 +52,11 @@ public:
     Mat getGroundTruth();
     void setKeyView(){keyView = true;}
     bool isKeyView(){return keyView;}
+    bool isStereo(){return stereo;}
 private:
     long id;
     bool keyView;
+    int time;
     Mat gt;
     vector<Mat> imgs;
     FeatureSet leftFeatureSet;

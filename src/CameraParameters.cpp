@@ -15,9 +15,9 @@ Mat CameraParameters::getIntrinsic()
 {
     Mat intrinsic = Mat::eye(3, 3, CV_64F);
     intrinsic.at<double>(0, 0) = CameraParameters::focal;
-    intrinsic.at<double>(1, 1) = -CameraParameters::focal;
+    intrinsic.at<double>(1, 1) = CameraParameters::focal;
     intrinsic.at<double>(0, 2) = CameraParameters::principal.x;
-    intrinsic.at<double>(1, 2) = 376 - CameraParameters::principal.y;
+    intrinsic.at<double>(1, 2) = CameraParameters::principal.y;
     return intrinsic.clone();
 }
 

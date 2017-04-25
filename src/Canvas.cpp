@@ -8,6 +8,8 @@
 
 #include "Canvas.h"
 
+
+
 void Canvas::drawFeatureMatches(Mat img1, Mat img2, vector<Point2f> points1,vector<Point2f> points2)
 {
     Mat canvas;
@@ -24,6 +26,14 @@ void Canvas::drawFeatureMatches(Mat img1, Mat img2, vector<Point2f> points1,vect
     namedWindow("Display window", WINDOW_AUTOSIZE);
     imshow("Display window", canvas);
     waitKey(0);
+}
+
+void Canvas::drawFeatureMatches(Mat img1, Mat img2, vector<KeyPoint> points1,vector<KeyPoint> points2)
+{
+    vector<Point2f> ps1, ps2;
+    KeyPoint::convert(points1, ps1);
+    KeyPoint::convert(points2, ps2);
+    drawFeatureMatches(img1, img2, ps1, ps2);
 }
 
 
@@ -78,9 +88,41 @@ void Canvas::drawTrackingPathEveryOtherK(Mat img, vector<KeyPoint> keyPoints1, v
 
 void Canvas::drawLine( Mat img, Point2f start, Point2f end )
 {
+    Mat tmp = img.clone();
     int thickness = 0.5;
     int lineType = LINE_8;
-    line( img,start,end,Scalar( 255, 0, 0 ),thickness,lineType );
+    line( tmp,start,end,Scalar( 255, 0, 0 ),thickness,lineType );
+    namedWindow("Line", WINDOW_AUTOSIZE);
+    imshow("Line", tmp);
+    waitKey(0);
+}
+void Canvas::drawLines(Mat img, vector<Point2f> starts, vector<Point2f> ends)
+{
+    Mat tmp = img.clone();
+    int thickness = 0.5;
+    int lineType = LINE_8;
+    for(int i = 0; i < starts.size(); i++)
+    {
+        line( tmp,starts[i],ends[i],Scalar( 255, 0, 0 ),thickness,lineType );
+    }
+    namedWindow("Line", WINDOW_AUTOSIZE);
+    imshow("Line", tmp);
+    waitKey(0);
+}
+void Canvas::drawLinesAndPoints(Mat img, vector<Point2f> starts, vector<Point2f> ends, vector<KeyPoint> points)
+{
+    Mat tmp = img.clone();
+    int thickness = 0.5;
+    int lineType = LINE_8;
+    for(int i = 0; i < starts.size(); i++)
+    {
+        line( tmp,starts[i],ends[i],Scalar( 255, 0, 0 ),thickness,lineType );
+    }
+    drawKeypoints(tmp, points, tmp);
+        
+    namedWindow("LineAndPoints", WINDOW_AUTOSIZE);
+    imshow("Line", tmp);
+    waitKey(0);
 }
 
 void Canvas::drawTrackingPath(Mat img, vector<Point2f> keyPoints1, vector<Point2f> keyPoints2)

@@ -21,12 +21,13 @@ using namespace std;
 
 
 #define DATASET "KITTI"
+#define STEREO true
 #define MONOCULAR false
 
 int main( int argc, char** argv )
 {
     // create a bunch of strategy class objects
-    ViewReader *reader = new ViewReader(DATASET, TRACK, MONOCULAR);
+    ViewReader *reader = new ViewReader(DATASET, TRACK, STEREO);
     FeatureExtractor *featureExtractor = new FeatureExtractor();
     FeatureTracker *featureTracker = new FeatureTracker();
     ViewTracker *viewTracker = new ViewTracker();
@@ -36,7 +37,7 @@ int main( int argc, char** argv )
     vector<Mat> Trs;
     vector<View*> views;
     MonocularOdometry *monocularOdometry = new MonocularOdometry();
-    monocularOdometry->run(reader, featureExtractor, featureTracker, viewTracker, poseEstimator, Trs, views);
+    monocularOdometry->run2(reader, featureExtractor, featureTracker, viewTracker, poseEstimator, Trs, views);
     
     // save result to file
     monocularOdometry->save(TRACK, views);

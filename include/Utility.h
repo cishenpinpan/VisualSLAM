@@ -10,6 +10,7 @@
 #define Utility_h
 
 #include <stdio.h>
+#include <algorithm>
 #include <opencv2/opencv.hpp>
 #include "opencv2/core.hpp"
 #include "opencv2/features2d.hpp"
@@ -44,7 +45,12 @@ double reproject3DPoints(vector<Point3d> points3D, Mat pose, vector<Point2f> poi
 Mat getEssentialMatrix(const Mat R, const Mat t);
 double projectEpipolarLine(const Mat E, Point2f pixel1, Point2f pixel2);
 
+double mean(const vector<double> &arr);
+double median(const vector<double> &arr);
+double standardDeviation(const vector<double> &arr);
+void rejectDistributionOutliers(vector<double> &arr);
 
+double huber(double err, double delta, bool L1Norm);
 
 
 #endif /* Utility_h */

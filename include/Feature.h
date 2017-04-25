@@ -10,6 +10,7 @@
 #define Feature_h
 
 #include <stdio.h>
+#include <map>
 #include "opencv2/features2d.hpp"
 
 using namespace std;
@@ -34,13 +35,14 @@ class FeatureSet
 private:
     vector<KeyPoint> featurePoints;
     vector<long int> ids;
+    map<long, int> idLookup;
 public:
     FeatureSet(){;};
     FeatureSet(vector<KeyPoint> _featurePoints, vector<long int> _ids) : featurePoints(_featurePoints), ids(_ids){};
     vector<KeyPoint>& getFeaturePoints(){return featurePoints;};
     void setFeaturePoints(const vector<KeyPoint> _featurePoints){featurePoints = vector<KeyPoint>(_featurePoints);};
     vector<long int>& getIds(){return ids;};
-    void setIds(const vector<long int> _ids){ids = vector<long int>(_ids);};
+    void setIds(const vector<long int> _ids);
     Feature getFeatureByIndex(int index){return Feature(featurePoints[index], ids[index]);}
     Feature getFeatureById(long id);
     void addFeature(Feature feature);

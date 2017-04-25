@@ -135,6 +135,8 @@ void triangulatePoints(Mat globalPose, Mat relativePose, vector<Point2f> points1
         homo2.at<double>(2, 0) = 1.0;
         homo1 = invK * homo1;
         homo2 = invK * homo2;
+        cout << homo1 << endl;
+        cout << homo2 << endl;
         Mat v1 = homo1;
         Mat v2 = -relativeR * homo2;
         Mat A(3, 2, CV_64F);
@@ -178,6 +180,12 @@ pair<double, double> reproject3DPoint(Point3d point3d, Mat pose, KeyPoint point2
     Mat T = pose(Rect(3, 0, 1, 3)).clone();
     Mat gammaW = Mat(point3d);
     Mat gammaC = R.inv() * (gammaW - T);
+    if(gammaC.at<double>(2, 0) == 0)
+    {
+        cout << gammaW << endl;
+        cout << R << T << endl;
+        cout << endl;
+    }
     Mat homoC = gammaC / gammaC.at<double>(2, 0);
     Mat pixelC = CameraParameters::getIntrinsic() * homoC;
     pair<double, double> error = {0.0, 0.0};
@@ -271,3 +279,58 @@ Mat anglesToRotationMatrix(const Mat &theta)
     
     return R.clone();
 }
+double median(const vector<double> &arr)
+{
+    vector<double> tmp(arr);
+    sort(tmp.begin(), tmp.end());
+    return tmp[tmp.size() / 2];
+}
+double mean(const vector<double> &arr)
+{
+    double sum = 0.0;
+    for(double d : arr)
+    {
+        sum += d;
+    }
+    double mean = sum / arr.size();
+    return mean;
+}
+double standardDeviation(const vector<double> &arr)
+{
+    double avg = mean(arr);
+    double sigma = 0.0;
+    for(double d : arr)
+    {
+        sigma += (d - avg) * (d - avg);
+    }
+    sigma /= arr.size();
+    sigma = sqrt(sigma);
+    return sigma;
+}
+void rejectDistributionOutliers(vector<double> &arr)
+{
+    vector<double> tmp;
+    double avg = median(arr);
+    double sigma = standardDeviation(arr);
+    for(double d : arr)
+    {
+        if(abs(d - avg) < sigma)
+            tmp.push_back(d);
+    }
+    arr = vector<double>(tmp);
+}
+double huber(double err, double delta, bool L1Norm)
+{
+    double huberLoss = 0.0;
+    if(abs(err) <= delta)
+    {
+        huberLoss = 0.5 * err * err;
+    }
+    else
+    {
+        huberLoss = delta * (abs(err) - 0.5 * delta);
+    }
+    return min(abs(err), delta);
+    return L1Norm ? sqrt(huberLoss) : huberLoss;
+}
+

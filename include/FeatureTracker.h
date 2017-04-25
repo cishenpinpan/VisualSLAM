@@ -9,6 +9,7 @@
 #ifndef FeatureTracker_h
 #define FeatureTracker_h
 
+#include <time.h>
 #include "View.h"
 #include "opencv2/imgcodecs.hpp"
 #include "opencv2/features2d.hpp"
@@ -25,21 +26,12 @@ using namespace cv::xfeatures2d;
 class FeatureTracker
 {
 public:
-    // temporal / general
-    Mat track(Mat img1, Mat img2, FeatureSet& featureSet1,
-              FeatureSet& featureSet2, bool stereo);
-    Mat searchLandmarks(View* v, map<long, Landmark> landmarkBook, View* prevView);
-    
-    void kltTrack(Mat img1, Mat img2, FeatureSet& featureSet1, FeatureSet& featureSet2, bool stereo);
-    
+    void kltTrack(const Mat img1, const Mat img2, FeatureSet& featureSet1, FeatureSet& featureSet2, bool stereo);
     void refineTrackedFeatures(Mat img1, Mat img2, FeatureSet& featureSet1, FeatureSet& featureSet2, bool stereo);
-    // stereo
-    void track(View *v);
     void trackAndMatch(vector<View*> views);
-    
-private:
-    void updateFeatures(vector<Point2f> &points, map<int, int> currFids, map<int, int> targetFids);
-    
+    void trackAndMatch(View *v);
+    void track(vector<View*> views);
+    void track(View *v);
 };
 
 #endif /* FeatureTracker_h */
