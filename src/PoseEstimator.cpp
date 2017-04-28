@@ -574,15 +574,6 @@ void PoseEstimator::solveRatioInTriplets(vector<View*> keyViews, vector<View*> a
     vector<double> ratios(numViews - 1, 1.0); // size = numViews - 1
     vector<Mat> relativePoses(numViews - 1, Mat::eye(4, 4, CV_64F)); // size = numViews - 1
     Canvas *canvas = new Canvas();
-    // estimate up-to-scale relative poses
-    for(int i = 1; i < numViews; i++)
-    {
-        Mat relativePose = estimatePose(keyViews[i - 1], keyViews[i]);
-        // normailze translation vector to unit vector
-        relativePose.col(3).rowRange(0, 3) = relativePose.col(3).rowRange(0, 3)
-                                        / norm(relativePose.col(3).rowRange(0, 3));
-        relativePoses[i - 1] = relativePose.clone();
-    }
     // divide views into triplets
     for(int i = 0; i < numViews - 2; i++)
     {
@@ -604,28 +595,21 @@ void PoseEstimator::solveRatioInTriplets(vector<View*> keyViews, vector<View*> a
             cout << "ratio: " << ratio << endl;
             cout << "reversedRatio: " << 1 / reverseRatio << endl;
             cout << "motion model: " << ratioFromMotionModel << endl;
-            cout << "ground truth: " << cheatScales[i] << endl;
             // replace second view with a nearby backup view
-            int viewIndex = triplet[1]->getTime() - 1;
+            int viewIndex = triplet[2]->getTime() - 1;
             vector<View*> backups;
-            if(viewIndex - 1 > triplet[0]->getTime() - 1)
-                backups.push_back(allViews[viewIndex - 1]);
-            if(viewIndex + 1 < triplet[2]->getTime() - 1)
-                backups.push_back(allViews[viewIndex + 1]);
-            if(viewIndex - 2 > triplet[0]->getTime() - 1)
-                backups.push_back(allViews[viewIndex - 2]);
-            if(viewIndex + 2 < triplet[2]->getTime() - 1)
-                backups.push_back(allViews[viewIndex + 2]);
+            backups.push_back(allViews[viewIndex - 1]);
+            backups.push_back(allViews[viewIndex + 1]);
             // for each backup in order
             bool satisfied = false;
-            View *bestBackup = triplet[1];
+            View *bestBackup = triplet[2];
             for(View *backup : backups)
             {
                 // transfer features onto backup view
-                featureTracker->trackAndMatch({triplet[1], backup});
+                featureTracker->trackAndMatch({triplet[2], backup});
                 backup->setKeyView();
                 // update (bag, viewtracker) with backup
-                triplet[1] = backup;
+                triplet[2] = backup;
                 ViewTracker *localViewTracker = constructTriplet(triplet[0], triplet[1], triplet[2]);
                 // do those stuff again
                 cout << "Back up! Replacing " << ratio << " with ";
@@ -645,24 +629,37 @@ void PoseEstimator::solveRatioInTriplets(vector<View*> keyViews, vector<View*> a
                 cout << "still unsatisfied!" << endl;
             // update "keyViews", "relative poses", and "ratios" after finding a best backup
             // 1. key views
-            keyViews[i + 1] = bestBackup;
-            // 2. relative poses ((i, i+1), (i+1, i+2))
-            const Mat pose_01 = relativePoses[i - 1];
-            const Mat pose_12 = estimatePose(keyViews[i], keyViews[i + 1]);
-            const Mat pose_23 = estimatePose(keyViews[i + 1], keyViews[i + 2]);
-            relativePoses[i] = pose_12.clone();
-            relativePoses[i + 1] = pose_23.clone();
+            keyViews[i + 2] = bestBackup;
+//            // 2. relative poses ((i, i+1), (i+1, i+2))
+//            const Mat pose_01 = relativePoses[i - 1];
+//            const Mat pose_12 = estimatePose(keyViews[i], keyViews[i + 1]);
+//            const Mat pose_23 = estimatePose(keyViews[i + 1], keyViews[i + 2]);
+//            relativePoses[i] = pose_12.clone();
+//            relativePoses[i + 1] = pose_23.clone();
             // 3. ratio in previous triplet -> (i-1, i, i+1)
-            localViewTracker = constructTriplet(keyViews[i - 1], keyViews[i], keyViews[i + 1]);
-            const double ratio_012 = solveScalePnPRANSAC(keyViews[i + 1],
-                                                         keyViews[i]->getPose(), localViewTracker->getLandmarkBook());
-            ratios[i] = ratio_012;
+//            localViewTracker = constructTriplet(keyViews[i - 1], keyViews[i], keyViews[i + 1]);
+//            const double ratio_012 = solveScalePnPRANSAC(keyViews[i + 1],
+//                                                         keyViews[i]->getPose(), localViewTracker->getLandmarkBook());
+//            ratios[i] = ratio_012;
         }
-        // cheat
-        double estimateVsMotionModel = abs(ratio - ratioFromMotionModel) / ratioFromMotionModel;
         // store ratios
         ratios[i + 1] = ratio;
+        
+        // cheat
+        double estimateVsMotionModel = abs(ratio - ratioFromMotionModel) / ratioFromMotionModel;
+        
     }
+    
+    // estimate up-to-scale relative poses
+    for(int i = 1; i < numViews; i++)
+    {
+        Mat relativePose = estimatePose(keyViews[i - 1], keyViews[i]);
+        // normailze translation vector to unit vector
+        relativePose.col(3).rowRange(0, 3) = relativePose.col(3).rowRange(0, 3)
+        / norm(relativePose.col(3).rowRange(0, 3));
+        relativePoses[i - 1] = relativePose.clone();
+    }
+    
     // update poses
     double alpha = 1.0;
     keyViews[0]->setPose(Mat::eye(4, 4, CV_64F));
