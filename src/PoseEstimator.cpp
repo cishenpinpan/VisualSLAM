@@ -590,7 +590,8 @@ void PoseEstimator::solveRatioInTriplets(vector<View*> keyViews, vector<View*> a
         cout << "ratio: " << ratio << endl;
         ViewTracker *reverse = constructTriplet(triplet[2], triplet[1], triplet[0]);
         double reverseRatio = solveScalePnPRANSAC(triplet[0], triplet[1]->getPose(), reverse->getLandmarkBook());
-        if(abs(1.0 / reverseRatio - ratio) / ratio > CHEAT_THRESHOLD)
+        double err = abs(1.0 / reverseRatio - ratio) / ratio;
+        if(err > CHEAT_THRESHOLD)
         {
             cout << "ratio: " << ratio << endl;
             cout << "reversedRatio: " << 1 / reverseRatio << endl;
@@ -598,11 +599,18 @@ void PoseEstimator::solveRatioInTriplets(vector<View*> keyViews, vector<View*> a
             // replace second view with a nearby backup view
             int viewIndex = triplet[2]->getTime() - 1;
             vector<View*> backups;
-            backups.push_back(allViews[viewIndex - 1]);
-            backups.push_back(allViews[viewIndex + 1]);
+            if(viewIndex - 1 > triplet[1]->getTime() - 1)
+                backups.push_back(allViews[viewIndex - 1]);
+            if(i + 3 < numViews && viewIndex + 1 < keyViews[i + 3]->getTime() - 1)
+                backups.push_back(allViews[viewIndex + 1]);
+            if(viewIndex - 2 > triplet[1]->getTime() - 1)
+                backups.push_back(allViews[viewIndex - 2]);
+            if(i + 3 < numViews && viewIndex + 2 < keyViews[i + 3]->getTime() - 1)
+                backups.push_back(allViews[viewIndex + 2]);
             // for each backup in order
             bool satisfied = false;
             View *bestBackup = triplet[2];
+            double leastErr = err;
             for(View *backup : backups)
             {
                 // transfer features onto backup view
@@ -618,12 +626,19 @@ void PoseEstimator::solveRatioInTriplets(vector<View*> keyViews, vector<View*> a
                 // satisfication test
                 ViewTracker *reverse = constructTriplet(triplet[2], triplet[1], triplet[0]);
                 double reverseRatio = solveScalePnPRANSAC(triplet[0], triplet[1]->getPose(), reverse->getLandmarkBook());
-                if(abs(1.0 / reverseRatio - ratio) / ratio < CHEAT_THRESHOLD)
+                double errOfBackup = abs(1.0 / reverseRatio - ratio) / ratio;
+                if(errOfBackup < CHEAT_THRESHOLD)
                 {
                     bestBackup = backup;
                     satisfied = true;
                     break;
                 }
+                else if(errOfBackup < leastErr)
+                {
+                    bestBackup = backup;
+                    leastErr = errOfBackup;
+                }
+                
             }
             if(!satisfied)
                 cout << "still unsatisfied!" << endl;
