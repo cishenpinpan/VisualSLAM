@@ -38,30 +38,23 @@ public:
     void removeRightFeatureById(long id);
     void setLeftFeatures(const FeatureSet _leftFeatureSet);
     void setRightFeatures(const FeatureSet _rightFeatureSet);
-    map<long, int>& getIdBook();
     void setIdBook(const map<long, int> _idBook);
     Mat getPose();
     void setPose(const Mat _pose);
     void setPose(const Mat _R, const Mat _T);
     Mat getR();
     Mat getT();
-    Mat getRelativePose(View* v);
-    Mat getRelativeR(View *v);
-    Mat getRelativeT(View *v);
-    void setGroundTruth(const Mat _gt);
-    Mat getGroundTruth();
     void setKeyView(){keyView = true;}
     bool isKeyView(){return keyView;}
     bool isStereo(){return stereo;}
+    int getTime(){return time;}
 private:
     long id;
     bool keyView;
     int time;
-    Mat gt;
     vector<Mat> imgs;
     FeatureSet leftFeatureSet;
     FeatureSet rightFeatureSet;
-    map<long, int> idBook;
     Mat pose;
     bool stereo;
 };

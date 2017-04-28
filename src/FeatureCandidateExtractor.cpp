@@ -54,7 +54,6 @@ Mat FeatureCandidateExtractor::computeDescriptors(const Mat img, vector<KeyPoint
         detector->setMaxFeatures(3500);
         detector->setNLevels(6);
         detector->compute(img, keyPoints1,descriptors);
-
     }
     else
     {

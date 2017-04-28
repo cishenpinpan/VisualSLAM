@@ -231,8 +231,8 @@ void ViewTracker::bundleAdjust(int option, bool global)
     optimizer.setAlgorithm(solver);
     
     // setting up camer parameters
-    double focalLength = CameraParameters::focal;
-    Vector2d principalPoint(CameraParameters::principal.x, CameraParameters::principal.y);
+    double focalLength = CameraParameters::getFocal();
+    Vector2d principalPoint(CameraParameters::getPrincipal().x, CameraParameters::getPrincipal().y);
     vector<g2o::SE3Quat, aligned_allocator<g2o::SE3Quat> > true_poses;
     g2o::CameraParameters * camParams = new g2o::CameraParameters (focalLength, principalPoint, 0.);
     camParams->setId(0);

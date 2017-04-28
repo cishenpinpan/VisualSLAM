@@ -37,7 +37,7 @@ int main( int argc, char** argv )
     vector<Mat> Trs;
     vector<View*> views;
     MonocularOdometry *monocularOdometry = new MonocularOdometry();
-    monocularOdometry->run2(reader, featureExtractor, featureTracker, viewTracker, poseEstimator, Trs, views);
+    monocularOdometry->run(reader, featureExtractor, featureTracker, viewTracker, poseEstimator, Trs, views);
     
     // save result to file
     monocularOdometry->save(TRACK, views);

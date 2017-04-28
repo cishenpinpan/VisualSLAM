@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 #include <opencv2/opencv.hpp>
+#include "SystemParameters.h"
 
 using namespace std;
 using namespace cv;
@@ -21,9 +22,13 @@ using namespace cv;
 class CameraParameters
 {
 public:
-    static double focal;
-    static Point2d principal;
+    static vector<double> focals;
+    static vector<Point2d> principals;
+    static vector<double> baselines;
     static vector<float> distCoeff;
+    static double getFocal();
+    static Point2d getPrincipal();
+    static double getBaseline();
     static Mat getIntrinsic();
     static Mat getStereoPose();
     static Mat getDistCoeff();

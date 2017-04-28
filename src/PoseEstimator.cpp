@@ -14,21 +14,106 @@ PoseEstimator::PoseEstimator()
 {
     
 }
-double evaluateReprojectionError(const double lambda, const void *data, double *fvec)
+
+Mat PoseEstimator::estimatePose(View *v1, View *v2, double lambda)
+{
+    return estimatePoseMono(v1, v2, lambda);
+}
+
+Mat PoseEstimator::estimatePoseMono(View *v1, View *v2, double lambda)
+{
+    // 1. assume features are not matched
+    vector<KeyPoint> newKps1, newKps2;
+    vector<long> prevIds = v2->getLeftFeatureSet().getIds(), newIds;
+    for(int i = 0; i < prevIds.size(); i++)
+    {
+        long id = prevIds[i];
+        if(!v1->getLeftFeatureSet().hasId(id))
+            continue;
+        KeyPoint kp1 = v1->getLeftFeatureSet().getFeatureById(id).getPoint();
+        KeyPoint kp2 = v2->getLeftFeatureSet().getFeaturePoints()[i];
+//        Canvas canvas;
+//        canvas.drawFeatureMatches(v1->getImgs()[0], v2->getImgs()[0], {kp1}, {kp2});
+        newKps1.push_back(kp1);
+        newKps2.push_back(kp2);
+        newIds.push_back(id);
+    }
+    //    v1->getLeftFeatureSet().setFeaturePoints(newKps1);
+    //    v1->getLeftFeatureSet().setIds(newIds);
+    //    v2->getLeftFeatureSet().setFeaturePoints(newKps2);
+    //    v2->getLeftFeatureSet().setIds(newIds);
+    // 2. estimate essential matrix
+    Mat essentialMatrixStat;
+    
+    vector<Point2f> points1, points2;
+    KeyPoint::convert(newKps1, points1);
+    KeyPoint::convert(newKps2, points2);
+    Mat E = findEssentialMat(points2, points1,
+                             CameraParameters::getFocal(), CameraParameters::getPrincipal(), RANSAC, 0.999, 1.0, essentialMatrixStat);
+    // reject outliers
+    // rejectOutliers(v1, v2, essentialMatrixStat);
+    
+    // cout << "essential matrix inliers: " << count << "/" << points1.size() << endl;
+    
+    // 3. recorver pose (translation up to a scale)
+    Mat poseRecoveryStat;
+    Mat R, t;
+    KeyPoint::convert(newKps1, points1);
+    KeyPoint::convert(newKps2, points2);
+    recoverPose(E, points2, points1, R, t,
+                CameraParameters::getFocal(), CameraParameters::getPrincipal(), poseRecoveryStat);
+    t = lambda * t;
+    // reject outliers
+    // rejectOutliers(v1, v2, poseRecoveryStat);
+    
+    // cout << "recovering pose inliers: " << count << "/" << points1.size()<< endl;
+    
+    // 4. update pose
+    Mat poseChange = Mat::eye(4, 4, CV_64F);
+    Mat aux = poseChange(Rect(0, 0, 3, 3));
+    R.copyTo(aux);
+    aux = poseChange(Rect(3, 0, 1, 3));
+    t.copyTo(aux);
+    // v2->setPose(v1->getPose() * poseChange);
+    
+    // 7. return pose
+    return poseChange.clone();
+}
+Mat PoseEstimator::solvePnP(View *v, map<long, Landmark> landmarkBook)
+{
+    vector<Point3d> landmarks;
+    vector<KeyPoint> kps;
+    vector<Point2f> imagePoints;
+    const vector<long> ids = v->getLeftFeatureSet().getIds();
+    for(int i = 0; i < v->getLeftFeatureSet().size(); i++)
+    {
+        KeyPoint kp = v->getLeftFeatureSet().getFeaturePoints()[i];
+        long id = v->getLeftFeatureSet().getIds()[i];
+        if(!landmarkBook.count(id))
+            continue;
+        landmarks.push_back(landmarkBook[id].getPoint());
+        kps.push_back(kp);
+    }
+    KeyPoint::convert(kps, imagePoints);
+    const Mat cameraMatrix = CameraParameters::getIntrinsic();
+    const Mat distCoeffs = CameraParameters::getDistCoeff();
+    Mat R, Rvec, t;
+    Mat status;
+    solvePnPRansac(landmarks, imagePoints,cameraMatrix,distCoeffs, Rvec, t, false, 100, 8.0, 0.9, status, CV_ITERATIVE);
+    Rodrigues(Rvec, R);
+    Mat pose = Converter::rotationTranslationToPose(R, t);
+    pose = pose.inv();
+    return pose.clone();
+}
+
+double evaluateReprojectionError(const void *data, double *fvec)
 {
     // unpack data
-    ScaleEstimatorStruct *dataStruct = (ScaleEstimatorStruct*) data;
-    vector<KeyPoint> keyPoints = dataStruct->keyPoints;
-    vector<Point3d> p3ds = dataStruct->landmarks;
-    View *v = dataStruct->v;
-    const Mat prevPose = dataStruct->prevPose;
-    vector<bool> status(p3ds.size(), true);
-    
-    // update pose
-    Mat relativePose = prevPose.inv() * v->getPose();
-    // multiply by lambda
-    relativePose.col(3).rowRange(0, 3) = lambda * relativePose.col(3).rowRange(0, 3);
-    const Mat currPose = prevPose * relativePose;
+    PnP* pnpData = (PnP*)data;
+    const Mat currPose = pnpData->pose;
+    vector<KeyPoint> keyPoints = pnpData->keyPoints;
+    vector<Point3d> p3ds = pnpData->landmarks;
+    vector<bool> status = vector<bool>(keyPoints.size(), false);
     
     double totalError = 0.0;
     int inlierCount = 0, totalCount = 0;
@@ -55,88 +140,47 @@ double evaluateReprojectionError(const double lambda, const void *data, double *
         totalError += reprojectionError;
     }
    
-    dataStruct->status = vector<bool>(status);
-    dataStruct->inlierRatio = double(inlierCount) / totalCount;
+    pnpData->status = vector<bool>(status);
+    pnpData->inlierRatio = double(inlierCount) / totalCount;
     return totalError;
 }
-void evaluateReprojectionError(const double *par, const int nEqs, const void *data, double *fvec, int *userBreak)
-{    
+void evaluateTripletReprojectionError(const double *par, const void *data, double *fvec)
+{
     double lambda = *par;
-    evaluateReprojectionError(lambda, data, fvec);
+    
+    // unpack
+    Triplet *dataStruct = (Triplet*) data;
+    vector<KeyPoint> keyPoints = dataStruct->keyPoints;
+    vector<Point3d> landmarks = dataStruct->landmarks;
+    View *v = dataStruct->v;
+    const Mat prevPose = dataStruct->prevPose;
+    // update pose
+    Mat relativePose = prevPose.inv() * v->getPose();
+    // multiply by lambda
+    relativePose.col(3).rowRange(0, 3) = lambda * relativePose.col(3).rowRange(0, 3);
+    const Mat currPose = prevPose * relativePose;
+    
+    // construct pnp struct
+    PnP *pnp = new PnP(currPose, keyPoints, landmarks);
+    
+    evaluateReprojectionError(pnp, fvec);
+    
+    // inlier status
+    vector<bool> status(landmarks.size(), false);
+    for(int i = 0; i < landmarks.size(); i++)
+    {
+        if(pnp->status[i])
+            status[i] = true;
+    }
+    dataStruct->status = vector<bool>(status);
+    dataStruct->inlierRatio = pnp->inlierRatio;
 }
-double solveScaleSinglePoint(View *v1, View* v2, View* v3, vector<KeyPoint> kps, Point3d p3d)
+void evaluateTripletReprojectionError(const double *par, const int nEqs, const void *data, double *fvec, int *userBreak)
 {
-    // form several entities first
-//    Mat gamma_
-    Mat pose_21 = v2->getPose().inv() * v1->getPose();
-    Mat pose_23 = v2->getPose().inv() * v3->getPose();
-    Mat R_21 = pose_21.rowRange(0, 3).colRange(0, 3).clone();
-    Mat R_23 = pose_23.rowRange(0, 3).colRange(0, 3).clone();
-    Mat T_21 = pose_21.rowRange(0, 3).col(3).clone();
-    Mat T_23 = pose_23.rowRange(0, 3).col(3).clone();
-    Mat e_1 = Mat::zeros(3, 1, CV_64F);
-    e_1.at<double>(0, 0) = 1;
-    Mat e_2 = Mat::zeros(3, 1, CV_64F);
-    e_2.at<double>(1, 0) = 1;
-    Mat a_1_21 = e_1.t() * R_21;
-    Mat a_2_21 = e_2.t() * T_21;
-    Mat a_1_23 = e_1.t() * T_23;
-    Mat a_2_23 = e_2.t() * T_23;
-    Mat b_1_21 = e_1.t() * T_21;
-    Mat b_2_21 = e_2.t() * T_21;
-    Mat b_1_23 = e_1.t() * T_23;
-    Mat b_2_23 = e_2.t() * T_23;
-    
-    
-    return 1.0;
-}
-double PoseEstimator::solveScaleDist(View *v1, View* v2, View* v3, map<long, Landmark> landmarkBook, double initial)
-{
-    // solve lambda for each single point
-    
-    // take out existing 2d features and their corresponding 3d landmarks
-    multiset<long> validIds;
-    vector<vector<KeyPoint>> kps;
-    vector<Point3d> p3ds;
-    FeatureSet featureSet_v1 = v1->getLeftFeatureSet();
-    FeatureSet featureSet_v2 = v2->getLeftFeatureSet();
-    FeatureSet featureSet_v3 = v3->getLeftFeatureSet();
-    for(int i = 0; i < featureSet_v1.size(); i++)
-    {
-        long id = featureSet_v1.getIds()[i];
-        validIds.insert(id);
-    }
-    for(int i = 0; i < featureSet_v2.size(); i++)
-    {
-        long id = featureSet_v2.getIds()[i];
-        validIds.insert(id);
-    }
-    for(int i = 0; i < featureSet_v3.size(); i++)
-    {
-        long id = featureSet_v3.getIds()[i];
-        validIds.insert(id);
-    }
-    // remove non-common feature points
-    for(set<long>::iterator it = validIds.begin(); it != validIds.end(); it++)
-    {
-        if(validIds.count(*it) == 3 && landmarkBook.count(*it))
-        {
-            kps.push_back({v1->getLeftFeatureSet().getFeatureById(*it).getPoint(),
-                            v2->getLeftFeatureSet().getFeatureById(*it).getPoint(),
-                            v3->getLeftFeatureSet().getFeatureById(*it).getPoint()});
-            p3ds.push_back(landmarkBook[*it].getPoint());
-        }
-    }
-
-    for(int i = 0; i < kps.size(); i++)
-    {
-        double lambda = solveScaleSinglePoint(v1, v2, v3, kps[i], p3ds[i]);
-    }
-    return 1.0;
+    evaluateTripletReprojectionError(par, data, fvec);
 }
 double PoseEstimator::solveScalePnP(View *v, const Mat prevPose, map<long, Landmark> landmarkBook, double initial)
 {
-    
     // cheat using PnP
     Mat newPose = solvePnP(v, landmarkBook);
     Mat relativePose = prevPose.inv() * newPose;
@@ -165,7 +209,7 @@ double PoseEstimator::solveScalePnP(View *v, const Mat prevPose, map<long, Landm
     // lm
     // 1 DoF
     const int nEqs = int(kps.size()) * 2;
-    ScaleEstimatorStruct dataStruct(v, prevPose, kps, p3ds);
+    Triplet dataStruct(v, prevPose, kps, p3ds);
     
     // 2. nonlinear optimization (levenburg marquardt)
     /* auxiliary parameters */
@@ -175,45 +219,13 @@ double PoseEstimator::solveScalePnP(View *v, const Mat prevPose, map<long, Landm
     
     double lambda = initial;
     double *par = &lambda;
-    lmmin(1, par, nEqs, &dataStruct, evaluateReprojectionError, &control, &status);
+    lmmin(1, par, nEqs, &dataStruct, evaluateTripletReprojectionError, &control, &status);
     cout << "triplet common features: " << kps.size() << endl;
     return lambda;
 
 }
 double PoseEstimator::solveScalePnPRANSAC(View *v, const Mat prevPose, map<long, Landmark> landmarkBook, double initial)
 {
-//    vector<double> lambdaDist;
-//    // for each point, compute a lambda
-//    for(int i = 0; i < v->getLeftFeatureSet().size(); i++)
-//    {
-//        KeyPoint kp = v->getLeftFeatureSet().getFeaturePoints()[i];
-//        long id = v->getLeftFeatureSet().getIds()[i];
-//        if(!landmarkBook.count(id))
-//            continue;
-//        Point3d p3d = landmarkBook[id].getPoint();
-//        double lambda = initial;
-//        double *par = &lambda;
-//        vector<KeyPoint> kps;
-//        vector<Point3d> p3ds;
-//        kps.push_back(kp);
-//        p3ds.push_back(p3d);
-//        const int nEqs = 2;
-//        ScaleEstimatorStruct dataStruct(v, prevPose, kps, p3ds);
-//        // 2. nonlinear optimization (levenburg marquardt)
-//        /* auxiliary parameters */
-//        lm_control_struct control = lm_control_double;
-//        lm_status_struct  status;
-//        
-//        control.verbosity = 0;
-//        
-//        lmmin(1, par, nEqs, &dataStruct, evaluateReprojectionError, &control, &status);
-//        lambdaDist.push_back(lambda);
-//    }
-//    sort(lambdaDist.begin(), lambdaDist.end());
-//    rejectDistributionOutliers(lambdaDist);
-//    double lambda = median(lambdaDist);
-    
-    
     // take out existing 2d features and their corresponding 3d landmarks
     vector<KeyPoint> kps;
     vector<Point3d> p3ds;
@@ -255,7 +267,7 @@ double PoseEstimator::solveScalePnPRANSAC(View *v, const Mat prevPose, map<long,
         // lm
         // 1 DoF
         const int nEqs = int(kpsRANSAC.size()) * 2;
-        ScaleEstimatorStruct dataStruct(v, prevPose, kpsRANSAC, p3dsRANSAC);
+        Triplet dataStruct(v, prevPose, kpsRANSAC, p3dsRANSAC);
         
         // 2. nonlinear optimization (levenburg marquardt)
         /* auxiliary parameters */
@@ -265,11 +277,11 @@ double PoseEstimator::solveScalePnPRANSAC(View *v, const Mat prevPose, map<long,
         
         double lambda = initial;
         double *par = &lambda;
-        lmmin(1, par, nEqs, &dataStruct, evaluateReprojectionError, &control, &status);
+        lmmin(1, par, nEqs, &dataStruct, evaluateTripletReprojectionError, &control, &status);
         
         // test this lambda on entire dataset
-        ScaleEstimatorStruct testData(v, prevPose, kps, p3ds);
-        evaluateReprojectionError(lambda, &testData, NULL);
+        Triplet testData(v, prevPose, kps, p3ds);
+        evaluateTripletReprojectionError(&lambda, &testData, NULL);
         // record only the best set of data points and their corresponding ratio
         double inlierRatio = testData.inlierRatio;
         if(maxInlierRatio < inlierRatio)
@@ -297,7 +309,7 @@ double PoseEstimator::solveScalePnPRANSAC(View *v, const Mat prevPose, map<long,
     for(int iter = 0; iter < 1; iter++)
     {
         // optimize this lambda on inlier dataset
-        ScaleEstimatorStruct testData(v, prevPose, inlierKps, inlierP3ds);
+        Triplet testData(v, prevPose, inlierKps, inlierP3ds);
         const int nEqs = int(inlierKps.size()) * 2;
         // 2. nonlinear optimization (levenburg marquardt)
         /* auxiliary parameters */
@@ -306,7 +318,7 @@ double PoseEstimator::solveScalePnPRANSAC(View *v, const Mat prevPose, map<long,
         control.verbosity = 0;
         
         double *par = &lambda;
-        lmmin(1, par, nEqs, &testData, evaluateReprojectionError, &control, &status);
+        lmmin(1, par, nEqs, &testData, evaluateTripletReprojectionError, &control, &status);
         
         // update inliers
         inlierStatus = vector<bool>(testData.status);
@@ -328,232 +340,18 @@ double PoseEstimator::solveScalePnPRANSAC(View *v, const Mat prevPose, map<long,
     
     return lambda;
 }
-
-void computeReprojectionErrorByTrinocular
-(const double *par, const int nEqs, const void *data, double *fvec, int *userBreak)
-{
-    // unpack initial guess
-    double lambda = *par;
-    // unpack data struct
-    TrinocularDataStruct *dataStruct = (TrinocularDataStruct*) data;
-    View *v1 = dataStruct->v1;
-    View *v2 = dataStruct->v2;
-    View *v = dataStruct->v;
-    map<long, vector<KeyPoint>> commonFeatures(dataStruct->commonFeatures);
-    
-
-    
-    Mat pose_v2v = v2->getPose().inv() * v->getPose();
-    const Mat pose_v1v2 = v1->getPose().inv() * v2->getPose();
-    // multiply by lambda
-    pose_v2v.rowRange(0, 3).col(3) = lambda * pose_v2v.rowRange(0, 3).col(3);
-    Mat pose_v1v = pose_v1v2 * pose_v2v;
-    pose_v1v = pose_v1v.inv();
-    pose_v2v = pose_v2v.inv();
-    Mat R_v1v = pose_v1v.rowRange(0, 3).colRange(0, 3).clone();
-    Mat R_v2v = pose_v2v.rowRange(0, 3).colRange(0, 3).clone();
-    Mat t_v1v = pose_v1v.rowRange(0, 3).col(3).clone();
-    Mat t_v2v = pose_v2v.rowRange(0, 3).col(3).clone();
-    Mat t_v1v_x = Converter::tVecToTx(t_v1v);
-    Mat t_v2v_x = Converter::tVecToTx(t_v2v);
-    Mat E_v1v = t_v1v_x * R_v1v;
-    Mat E_v2v = t_v2v_x * R_v2v;
-    Mat F_v1v = CameraParameters::getIntrinsic().inv().t() * E_v1v * CameraParameters::getIntrinsic().inv();
-    Mat F_v2v = CameraParameters::getIntrinsic().inv().t() * E_v2v * CameraParameters::getIntrinsic().inv();
-    double totalError = 0.0;
-    int i = 0;
-    for(map<long, vector<KeyPoint>>::iterator it = commonFeatures.begin(); it != commonFeatures.end(); it++)
-    {
-        
-        KeyPoint kp_v1 = it->second[0], kp_v2 = it->second[1], kp_v = it->second[2];
-
-        Mat p_v1 = Mat::ones(3, 1, CV_64F), p_v2 = Mat::ones(3, 1, CV_64F), p_v = Mat::ones(3, 1, CV_64F);
-        p_v1.at<double>(0, 0) = kp_v1.pt.x;
-        p_v1.at<double>(1, 0) = kp_v1.pt.y;
-        p_v2.at<double>(0, 0) = kp_v2.pt.x;
-        p_v2.at<double>(1, 0) = kp_v2.pt.y;
-        p_v.at<double>(0, 0) = kp_v.pt.x;
-        p_v.at<double>(1, 0) = kp_v.pt.y;
-        const double x = p_v.at<double>(0, 0), y = p_v.at<double>(1, 0);
-        const Mat epi_v1v = F_v1v * p_v1, epi_v2v = F_v2v * p_v2;
-        double a1 = epi_v1v.at<double>(0, 0), b1 = epi_v1v.at<double>(1, 0), c1 = epi_v1v.at<double>(2, 0);
-        double a2 = epi_v2v.at<double>(0, 0), b2 = epi_v2v.at<double>(1, 0), c2 = epi_v2v.at<double>(2, 0);
-    
-        // compute intersection of two epipolar lines (reprojection point)
-        double x_hat = (b1 * c2 - b2 * c1) / (a1 * b2 - a2 * b1);
-        double y_hat = (a2 * c1 - a1 * c2) / (a1 * b2 - a2 * b1);
-        Mat projected_hat(3, 1, CV_64F);
-        projected_hat.at<double>(0, 0) = x_hat;
-        projected_hat.at<double>(1, 0) = y_hat;
-        projected_hat.at<double>(2, 0) = 1;
-//        cout << projected_hat << endl;
-        Mat projected(3, 1, CV_64F);
-        projected.at<double>(0, 0) = x;
-        projected.at<double>(1, 0) = y;
-        projected.at<double>(2, 0) = 1;
-//        cout << projected << endl;
-//        cout << "----------" << endl;
-        fvec[i++] = projected.at<double>(0, 0) - projected_hat.at<double>(0, 0);
-        totalError += (projected.at<double>(0, 0) - projected_hat.at<double>(0, 0))
-                        * (projected.at<double>(0, 0) - projected_hat.at<double>(0, 0));
-        fvec[i++] = projected.at<double>(1, 0) - projected_hat.at<double>(1, 0);
-        totalError += (projected.at<double>(1, 0) - projected_hat.at<double>(1, 0))
-        * (projected.at<double>(1, 0) - projected_hat.at<double>(1, 0));
-        // cout << "err: ";
-        // cout << CameraParameters::focal * (x - x_hat) << ", " << CameraParameters::focal * (y - y_hat) << endl;
-    }
-}
-Mat PoseEstimator::estimatePoseByTrinocular(View *v1, View *v2, View *v)
-{
-    // find common feature points
-    map<long, vector<KeyPoint>> commonFeatures;
-    FeatureSet featureSet_v1 = v1->getLeftFeatureSet();
-    FeatureSet featureSet_v2 = v2->getLeftFeatureSet();
-    FeatureSet featureSet_v = v->getLeftFeatureSet();
-    for(int i = 0; i < featureSet_v1.size(); i++)
-    {
-        long id = featureSet_v1.getIds()[i];
-        commonFeatures[id].push_back(featureSet_v1.getFeaturePoints()[i]);
-    }
-    for(int i = 0; i < featureSet_v2.size(); i++)
-    {
-        long id = featureSet_v2.getIds()[i];
-        commonFeatures[id].push_back(featureSet_v2.getFeaturePoints()[i]);
-    }
-    for(int i = 0; i < featureSet_v.size(); i++)
-    {
-        long id = featureSet_v.getIds()[i];
-        commonFeatures[id].push_back(featureSet_v.getFeaturePoints()[i]);
-    }
-    // remove non-common feature points
-    for(map<long, vector<KeyPoint>>::iterator it = commonFeatures.begin(); it != commonFeatures.end(); )
-    {
-        if(it->second.size() < 3)
-            it = commonFeatures.erase(it);
-        else
-            it++;
-    }
-    // 1 DoF
-    double lambda = 1.0;
-    
-    double *par = &lambda;
-
-    TrinocularDataStruct dataStruct(v1, v2, v, commonFeatures, 0, 10);
-    const int nEqs = int(commonFeatures.size()) * 2;
-    // 2. nonlinear optimization (levenburg marquardt)
-    /* auxiliary parameters */
-    lm_control_struct control = lm_control_double;
-    lm_status_struct  status;
-    
-    control.verbosity = 0;
-    
-    lmmin(1, par, nEqs, &dataStruct, computeReprojectionErrorByTrinocular, &control, &status);
-    
-    // re-construct pose
-    Mat relativePose = v2->getPose().inv() * v->getPose();
-    relativePose.col(3).rowRange(0, 3) = lambda * relativePose.col(3).rowRange(0, 3);
-    v->setPose(v2->getPose() * relativePose);
-    return v->getPose();
-}
-Mat PoseEstimator::estimatePose(View *v1, View *v2, double lambda)
-{
-    return estimatePoseMono(v1, v2, lambda);
-}
-
-Mat PoseEstimator::estimatePoseMono(View *v1, View *v2, double lambda)
-{
-    // 1. assume features are not matched
-    vector<KeyPoint> newKps1, newKps2;
-    vector<long> prevIds = v2->getLeftFeatureSet().getIds(), newIds;
-    for(int i = 0; i < prevIds.size(); i++)
-    {
-        long id = prevIds[i];
-        KeyPoint kp1 = v1->getLeftFeatureSet().getFeatureById(id).getPoint();
-        KeyPoint kp2 = v2->getLeftFeatureSet().getFeaturePoints()[i];
-        newKps1.push_back(kp1);
-        newKps2.push_back(kp2);
-        newIds.push_back(id);
-    }
-//    v1->getLeftFeatureSet().setFeaturePoints(newKps1);
-//    v1->getLeftFeatureSet().setIds(newIds);
-//    v2->getLeftFeatureSet().setFeaturePoints(newKps2);
-//    v2->getLeftFeatureSet().setIds(newIds);
-    // 2. estimate essential matrix
-    Mat essentialMatrixStat;
-    
-    vector<Point2f> points1, points2;
-    KeyPoint::convert(newKps1, points1);
-    KeyPoint::convert(newKps2, points2);
-    Mat E = findEssentialMat(points2, points1,
-                        CameraParameters::focal, CameraParameters::principal, RANSAC, 0.999, 1.0, essentialMatrixStat);
-    // reject outliers
-    // rejectOutliers(v1, v2, essentialMatrixStat);
-
-    // cout << "essential matrix inliers: " << count << "/" << points1.size() << endl;
-    
-    // 3. recorver pose (translation up to a scale)
-    Mat poseRecoveryStat;
-    Mat R, t;
-    KeyPoint::convert(newKps1, points1);
-    KeyPoint::convert(newKps2, points2);
-    recoverPose(E, points2, points1, R, t,
-                CameraParameters::focal, CameraParameters::principal, poseRecoveryStat);
-    t = lambda * t;
-    // reject outliers
-    // rejectOutliers(v1, v2, poseRecoveryStat);
-    
-    // cout << "recovering pose inliers: " << count << "/" << points1.size()<< endl;
-    
-    // 4. update pose
-    Mat poseChange = Mat::eye(4, 4, CV_64F);
-    Mat aux = poseChange(Rect(0, 0, 3, 3));
-    R.copyTo(aux);
-    aux = poseChange(Rect(3, 0, 1, 3));
-    t.copyTo(aux);
-    v2->setPose(v1->getPose() * poseChange);
-    
-    // 7. return pose
-    return poseChange.clone();
-}
-Mat PoseEstimator::solvePnP(View *v, map<long, Landmark> landmarkBook)
-{
-    vector<Point3d> landmarks;
-    vector<KeyPoint> kps;
-    vector<Point2f> imagePoints;
-    const vector<long> ids = v->getLeftFeatureSet().getIds();
-    for(int i = 0; i < v->getLeftFeatureSet().size(); i++)
-    {
-        KeyPoint kp = v->getLeftFeatureSet().getFeaturePoints()[i];
-        long id = v->getLeftFeatureSet().getIds()[i];
-        if(!landmarkBook.count(id))
-            continue;
-        landmarks.push_back(landmarkBook[id].getPoint());
-        kps.push_back(kp);
-    }
-    KeyPoint::convert(kps, imagePoints);
-    const Mat cameraMatrix = CameraParameters::getIntrinsic();
-    const Mat distCoeffs = CameraParameters::getDistCoeff();
-    Mat R, Rvec, t;
-    Mat status;
-    solvePnPRansac(landmarks, imagePoints,cameraMatrix,distCoeffs, Rvec, t, false, 100, 8.0, 0.9, status, CV_ITERATIVE);
-    Rodrigues(Rvec, R);
-    Mat pose = Converter::rotationTranslationToPose(R, t);
-    pose = pose.inv();
-    return pose.clone();
-}
-void computeReprojectionErrorFourFrames(const void *data, const double lambda, double *fvec)
+void evaluateQuadReprojectionError(const void *data, const double lambda, double *fvec)
 {
     double inlierRatio = 0.0;
     double reprojectionError = 0.0;
     // unpack data struct
-    ScaleRefinementDataStruct *dataStruct = (ScaleRefinementDataStruct*) data;
+    Quadruple *dataStruct = (Quadruple*) data;
     View *v1 = dataStruct->v1;
     View *v2 = dataStruct->v2;
     View *v3 = dataStruct->v3;
     View *v4 = dataStruct->v4;
-    map<long, vector<KeyPoint>> commonFeatures(dataStruct->commonFeatures);
-    map<long, Landmark> landmarkBook(dataStruct->landmarkBook);
-    set<long> inlierList;
+    vector<vector<KeyPoint>> keyPoints;
+    vector<Point3d> landmarks;
     // compute relative poses
     Mat pose12 = v1->getPose().inv() * v2->getPose();
     Mat pose23 = v2->getPose().inv() * v3->getPose();
@@ -565,147 +363,55 @@ void computeReprojectionErrorFourFrames(const void *data, const double lambda, d
     Mat pose_v2 = v2->getPose();
     Mat pose_v3 = pose_v2 * pose23;
     Mat pose_v4 = pose_v3 * pose34;
-    // compute re-projection errors
-    double totalError = 0.0;
-    int inlierCount = 0, totalCount = 0;
-    double delta = sqrt(REPROJECTION_THRESHOLD * REPROJECTION_THRESHOLD / 2);
-    for(map<long, vector<KeyPoint>>::iterator it = commonFeatures.begin(); it != commonFeatures.end(); it++)
+   // compute pnp structs
+    vector<KeyPoint> keyPoints_3, keyPoints_4;
+    for(int i = 0; i < landmarks.size(); i++)
     {
-        bool isInlier = true;
-        totalCount++;
-        long id = it->first;
-        KeyPoint kp_v1 = it->second[0], kp_v2 = it->second[1], kp_v3 = it->second[2], kp_v4 = it->second[3];
-        Point3d p3d = landmarkBook[id].getPoint();
-        pair<double, double> err = {0.0, 0.0};
-        double reprojectionError = 0.0;
-//        err = reproject3DPoint(p3d, pose_v1, kp_v1, false);
-//        if(fvec != NULL)
-//        {
-//            *(fvec++) = err.first < delta ? err.first : delta;
-//            *(fvec++) = err.second < delta ? err.second : delta;
-//            if(err.first >= delta || err.second >= delta)
-//                isInlier = false;
-//        }
-//        totalError += (err.first * err.first + err.second * err.second);
-//        err = reproject3DPoint(p3d, pose_v2, kp_v2, false);
-//        if(fvec != NULL)
-//        {
-//            *(fvec++) = err.first < delta ? err.first : delta;
-//            *(fvec++) = err.second < delta ? err.second : delta;
-//            if(err.first >= delta || err.second >= delta)
-//                isInlier = false;
-//        }
-        totalError += (err.first * err.first + err.second * err.second);
-        err = reproject3DPoint(p3d, pose_v3, kp_v3, false);
-        if(fvec != NULL)
-        {
-            *(fvec++) = huber(err.first, delta, true);
-            *(fvec++) = huber(err.second, delta, true);
-        }
-        reprojectionError = sqrt(err.first * err.first + err.second * err.second);
-        if(reprojectionError >= REPROJECTION_THRESHOLD)
-            isInlier = false;
-        totalError += (err.first * err.first + err.second * err.second);
-        err = reproject3DPoint(p3d, pose_v4, kp_v4, false);
-        if(fvec != NULL)
-        {
-            *(fvec++) = huber(err.first, delta, true);
-            *(fvec++) = huber(err.second, delta, true);
-        }
-        if(reprojectionError >= REPROJECTION_THRESHOLD)
-            isInlier = false;
-        totalError += (err.first * err.first + err.second * err.second);
-        if(isInlier)
-        {
-            inlierCount++;
-            inlierList.insert(id);
-        }
+        keyPoints_3.push_back(keyPoints[i][2]);
+        keyPoints_4.push_back(keyPoints[i][3]);
     }
-    inlierRatio = double(inlierCount) / totalCount;
-    dataStruct->inlier = inlierRatio;
-    dataStruct->error = totalError;
-    dataStruct->inlierList = set<long>(inlierList);
+    PnP *pnp_3 = new PnP(pose_v3, keyPoints_3, landmarks);
+    PnP *pnp_4 = new PnP(pose_v4, keyPoints_4, landmarks);
+    if(fvec != NULL)
+    {
+        evaluateReprojectionError(pnp_3, fvec);
+        evaluateReprojectionError(pnp_4, fvec + landmarks.size() * 2);
+    }
+    else
+    {
+        evaluateReprojectionError(pnp_3, NULL);
+        evaluateReprojectionError(pnp_4, NULL);
+    }
+    // inlier status
+    vector<bool> status(landmarks.size(), false);
+    int inlierCount = 0, totalCount = 0;
+    for(int i = 0; i < landmarks.size(); i++)
+    {
+        if(pnp_3->status[i] && pnp_4->status[i])
+        {
+            status[i] = true;
+            inlierCount++;
+        }
+        totalCount++;
+    }
+    dataStruct->status = vector<bool>(status);
+    dataStruct->inlierRatio = double(inlierCount) / totalCount;
 }
-void computeReprojectionErrorFourFrames
-(const double *par, const int nEqs, const void *data, double *fvec, int *userBreak)
+void evaluateQuadReprojectionError(const double *par, const int nEqs, const void *data, double *fvec, int *userBreak)
 {
     // unpack initial guess (of the pose)
     double lambda = *par;
     // compute reprojection error
-    computeReprojectionErrorFourFrames(data, lambda, fvec);
-}
-double PoseEstimator::refineScale(vector<View*> views, map<long, Landmark> &landmarkBook)
-{
-    // unpack 4 frames
-    View *v1 = views[0], *v2 = views[1], *v3 = views[2], *v4 = views[3];
-    // find common features in four frames
-    map<long, vector<KeyPoint>> commonFeatures;
-    FeatureSet featureSet_v1 = v1->getLeftFeatureSet();
-    FeatureSet featureSet_v2 = v2->getLeftFeatureSet();
-    FeatureSet featureSet_v3 = v3->getLeftFeatureSet();
-    FeatureSet featureSet_v4 = v4->getLeftFeatureSet();
-    for(int i = 0; i < featureSet_v1.size(); i++)
-    {
-        long id = featureSet_v1.getIds()[i];
-        commonFeatures[id].push_back(featureSet_v1.getFeaturePoints()[i]);
-    }
-    for(int i = 0; i < featureSet_v2.size(); i++)
-    {
-        long id = featureSet_v2.getIds()[i];
-        commonFeatures[id].push_back(featureSet_v2.getFeaturePoints()[i]);
-    }
-    for(int i = 0; i < featureSet_v3.size(); i++)
-    {
-        long id = featureSet_v3.getIds()[i];
-        commonFeatures[id].push_back(featureSet_v3.getFeaturePoints()[i]);
-    }
-    for(int i = 0; i < featureSet_v4.size(); i++)
-    {
-        long id = featureSet_v4.getIds()[i];
-        commonFeatures[id].push_back(featureSet_v4.getFeaturePoints()[i]);
-    }
-    // remove non-common feature points
-    // record ids
-    vector<long> ids;
-    for(map<long, vector<KeyPoint>>::iterator it = commonFeatures.begin(); it != commonFeatures.end(); )
-    {
-        if(it->second.size() < 4 || !landmarkBook.count(it->first))
-            it = commonFeatures.erase(it);
-        else
-        {
-            ids.push_back(it->first);
-            it++;
-        }
-    }
-    cout << "quadruple common features: " << commonFeatures.size() << endl;
-    if(commonFeatures.size() < 20)
-        return 1.0;
-    // lm
-    // 1 DoF
-    double lambda = .99;
-    
-    double *par = &lambda;
-    
-    ScaleRefinementDataStruct *dataStruct = new ScaleRefinementDataStruct(v1, v2, v3, v4, landmarkBook, commonFeatures);
-    const int nEqs = int(commonFeatures.size()) * 4 * 2;
-    
-    // 2. nonlinear optimization (levenburg marquardt)
-    /* auxiliary parameters */
-    lm_control_struct control = lm_control_double;
-    lm_status_struct  status;
-    
-    control.verbosity = 0;
-    
-    lmmin(1, par, nEqs, dataStruct, computeReprojectionErrorFourFrames, &control, &status);
-    
-    return lambda;
+    evaluateQuadReprojectionError(data, lambda, fvec);
 }
 double PoseEstimator::refineScaleRANSAC(vector<View*> views, map<long, Landmark> &landmarkBook)
 {
     // unpack 4 frames
     View *v1 = views[0], *v2 = views[1], *v3 = views[2], *v4 = views[3];
     // find common features in four frames
-    map<long, vector<KeyPoint>> commonFeatures;
+    vector<vector<KeyPoint>> keyPoints;
+    vector<Point3d> landmarks;
+    multiset<long> commonIds;
     FeatureSet featureSet_v1 = v1->getLeftFeatureSet();
     FeatureSet featureSet_v2 = v2->getLeftFeatureSet();
     FeatureSet featureSet_v3 = v3->getLeftFeatureSet();
@@ -713,55 +419,58 @@ double PoseEstimator::refineScaleRANSAC(vector<View*> views, map<long, Landmark>
     for(int i = 0; i < featureSet_v1.size(); i++)
     {
         long id = featureSet_v1.getIds()[i];
-        commonFeatures[id].push_back(featureSet_v1.getFeaturePoints()[i]);
+        commonIds.insert(id);
     }
     for(int i = 0; i < featureSet_v2.size(); i++)
     {
         long id = featureSet_v2.getIds()[i];
-        commonFeatures[id].push_back(featureSet_v2.getFeaturePoints()[i]);
+        commonIds.insert(id);
     }
     for(int i = 0; i < featureSet_v3.size(); i++)
     {
         long id = featureSet_v3.getIds()[i];
-        commonFeatures[id].push_back(featureSet_v3.getFeaturePoints()[i]);
+        commonIds.insert(id);
     }
     for(int i = 0; i < featureSet_v4.size(); i++)
     {
         long id = featureSet_v4.getIds()[i];
-        commonFeatures[id].push_back(featureSet_v4.getFeaturePoints()[i]);
+        commonIds.insert(id);
     }
     // remove non-common feature points
     // record ids
-    vector<long> ids;
-    for(map<long, vector<KeyPoint>>::iterator it = commonFeatures.begin(); it != commonFeatures.end(); )
+    for(multiset<long>::iterator it = commonIds.begin(); it != commonIds.end(); it++)
     {
-        if(it->second.size() < 4 || !landmarkBook.count(it->first))
-            it = commonFeatures.erase(it);
-        else
+        if(commonIds.count(*it) == 4 && landmarkBook.count(*it))
         {
-            ids.push_back(it->first);
-            it++;
+            landmarks.push_back(landmarkBook[*it].getPoint());
+            keyPoints.push_back({featureSet_v1.getFeatureById(*it).getPoint(),
+                                 featureSet_v2.getFeatureById(*it).getPoint(),
+                                 featureSet_v3.getFeatureById(*it).getPoint(),
+                                 featureSet_v4.getFeatureById(*it).getPoint()});
         }
     }
-    if(commonFeatures.size() < 20)
+    if(landmarks.size() < 20)
         return 1.0;
     // RANSAC
     srand(time(NULL));
     double maxInlierRatio = 0.0;
     double bestLambda = 1.0;
-    set<long> inlierList;
+    vector<bool> inlierStatus;
     int N = 100;
     int K = 3;
     for(int i = 0; i < N; i++)
     {
         // generate k random number between 0 and commonFeatures.size()
-        map<long, vector<KeyPoint>> commonFeaturesRANSAC;
+        vector<Point3d> landmarksRANSAC;
+        vector<vector<KeyPoint>> keyPointsRANSAC;
+        set<long> indices;
         for(int k = 0; k < K; k++)
         {
-            long randomId = ids[rand() % commonFeatures.size()];
-            while(commonFeaturesRANSAC.count(randomId))
-                randomId = ids[rand() % commonFeatures.size()];
-            commonFeaturesRANSAC[randomId] = vector<KeyPoint>(commonFeatures[randomId]);
+            long randomIndex = rand() % landmarks.size();
+            while(indices.count(randomIndex))
+                randomIndex = rand() % landmarks.size();
+            landmarksRANSAC.push_back(landmarks[randomIndex]);
+            keyPointsRANSAC.push_back(keyPoints[randomIndex]);
         }
         // lm
         // 1 DoF
@@ -769,9 +478,9 @@ double PoseEstimator::refineScaleRANSAC(vector<View*> views, map<long, Landmark>
         
         double *par = &lambda;
         
-        ScaleRefinementDataStruct *dataStruct =
-                new ScaleRefinementDataStruct(v1, v2, v3, v4, landmarkBook, commonFeaturesRANSAC);
-        const int nEqs = int(commonFeaturesRANSAC.size()) * 2 * 2;
+        Quadruple *quad =
+                new Quadruple(v1, v2, v3, v4, keyPointsRANSAC, landmarksRANSAC);
+        const int nEqs = int(landmarks.size()) * 2 * 2;
         // 2. nonlinear optimization (levenburg marquardt)
         /* auxiliary parameters */
         lm_control_struct control = lm_control_double;
@@ -779,37 +488,43 @@ double PoseEstimator::refineScaleRANSAC(vector<View*> views, map<long, Landmark>
         
         control.verbosity = 0;
         
-        lmmin(1, par, nEqs, dataStruct, computeReprojectionErrorFourFrames, &control, &status);
+        lmmin(1, par, nEqs, quad, evaluateQuadReprojectionError, &control, &status);
         
         
         // test this lambda on entire dataset
-        ScaleRefinementDataStruct *completeDataStruct =
-                        new ScaleRefinementDataStruct(v1, v2, v3, v4, landmarkBook, commonFeatures);
-        computeReprojectionErrorFourFrames(completeDataStruct, lambda, NULL);
+        Quadruple *completeDataStruct =
+                        new Quadruple(v1, v2, v3, v4, keyPoints, landmarks);
+        evaluateQuadReprojectionError(completeDataStruct, lambda, NULL);
         // record only the best set of data points and their corresponding ratio
-        double inlierRatio = completeDataStruct->inlier;
+        double inlierRatio = completeDataStruct->inlierRatio;
         if(maxInlierRatio < inlierRatio)
         {
             maxInlierRatio = inlierRatio;
             bestLambda = lambda;
-            inlierList = set<long>(completeDataStruct->inlierList);
+            inlierStatus = vector<bool>(completeDataStruct->status);
         }
     }
     
     
     // final test
-    map<long, vector<KeyPoint>> inlierFeatures;
-    for(map<long, vector<KeyPoint>>::iterator it = commonFeatures.begin(); it != commonFeatures.end(); it++)
+    // take out inliers
+    vector<Point3d> inlierLandmarks;
+    vector<vector<KeyPoint>> inlierKeyPoints;
+    
+    for(int i = 0; i < inlierStatus.size(); i++)
     {
-        if(inlierList.count(it->first))
-            inlierFeatures[it->first] = vector<KeyPoint>(it->second);
+        if(inlierStatus[i])
+        {
+            inlierLandmarks.push_back(landmarks[i]);
+            inlierKeyPoints.push_back(keyPoints[i]);
+        }
     }
     double lambda = bestLambda;
     
     double *par = &lambda;
-    ScaleRefinementDataStruct *dataStruct =
-                    new ScaleRefinementDataStruct(v1, v2, v3, v4, landmarkBook, inlierFeatures);
-    const int nEqs = int(inlierFeatures.size()) * 2 * 2;
+    Quadruple *quad =
+                    new Quadruple(v1, v2, v3, v4, inlierKeyPoints, inlierLandmarks);
+    const int nEqs = int(inlierLandmarks.size()) * 2 * 2;
     // 2. nonlinear optimization (levenburg marquardt)
     /* auxiliary parameters */
     lm_control_struct control = lm_control_double;
@@ -817,62 +532,168 @@ double PoseEstimator::refineScaleRANSAC(vector<View*> views, map<long, Landmark>
     
     control.verbosity = 0;
     
-    lmmin(1, par, nEqs, dataStruct, computeReprojectionErrorFourFrames, &control, &status);
+    lmmin(1, par, nEqs, quad, evaluateQuadReprojectionError, &control, &status);
     
-    cout << "quadruple lambda(set of " << commonFeatures.size() << "): " << lambda << endl;
-    cout << "final inliers: " << dataStruct->inlier * 100 << "%" << endl;
+    cout << "quadruple lambda(set of " << inlierLandmarks.size() << "): " << lambda << endl;
+    cout << "final inliers: " << quad->inlierRatio * 100 << "%" << endl;
     
     return lambda;
 }
-void PoseEstimator::refineScaleMultipleFrames(vector<View*> views, int N)
+
+// function : given three views in order, do the following:
+//            1) compute up-to-scale relative poses between each pair
+//              (setting first view to origin(0, 0, 0))
+//              (used only for triangulation and later computation of optimal ratio)
+//            2) construct a world using first two
+//            3) store absolute poses (up-to-scale)(relative to first view) and landmarks in view tracker
+
+// input    : View *v1, View *v2, View *v3 -> three views IN ORDER
+//            ViewTracker *tripletTracker -> view tracker pointer
+
+// output   : void
+ViewTracker* PoseEstimator::constructTriplet(View *v1, View *v2, View *v3)
+{
+    const Mat pose_12 = estimatePose(v1, v2);
+    const Mat pose_23 = estimatePose(v2, v3);
+    v1->setPose(Mat::eye(4, 4, CV_64F));
+    v2->setPose(v1->getPose() * pose_12);
+    v3->setPose(v2->getPose() * pose_23);
+    ViewTracker *tripletTracker = new ViewTracker();
+    tripletTracker->addView(v1);
+    tripletTracker->addView(v2);
+    // triangulation
+    tripletTracker->computeLandmarks(true);
+    tripletTracker->addView(v3);
+    return tripletTracker;
+}
+void PoseEstimator::solveRatioInTriplets(vector<View*> keyViews, vector<View*> allViews)
 {
     // optimize N-ples;
-    vector<double> scales = {2.07632};
-    vector<Mat> relativePoses;
-    relativePoses.push_back(views[0]->getPose().inv() * views[1]->getPose());
+    FeatureTracker *featureTracker = new FeatureTracker();
+    int numViews = int(keyViews.size());
+    vector<double> ratios(numViews - 1, 1.0); // size = numViews - 1
+    vector<Mat> relativePoses(numViews - 1, Mat::eye(4, 4, CV_64F)); // size = numViews - 1
     Canvas *canvas = new Canvas();
-    for(int i = 0; i < views.size() - (N - 1); i++)
+    // estimate up-to-scale relative poses
+    for(int i = 1; i < numViews; i++)
     {
-        vector<View*> bag;
-        for(int j = 0; j < N; j++)
-            bag.push_back(views[i + j]);
-        const Mat relativePose = bag[1]->getPose().inv() * bag[2]->getPose();
-        ViewTracker *localViewTracker = new ViewTracker();
-        localViewTracker->addView(bag[0]);
-        localViewTracker->addView(bag[1]);
-        // triangulation
-        localViewTracker->computeLandmarks(true);
-        for(int j = 2; j < N; j++)
-            localViewTracker->addView(bag[j]);
-        
-        // solve the scale between 2nd and 3rd frame (adjust later)
-        double scale = 1.0;
-        if(N == 3)
-            scale = solveScalePnPRANSAC(bag[2], bag[1]->getPose(),
-                                                    localViewTracker->getLandmarkBook());
-        else if(N == 4)
-            scale = refineScaleRANSAC(bag, localViewTracker->getLandmarkBook());
-        
-        scales.push_back(scales.back() * scale);
-        relativePoses.push_back(relativePose.clone());
+        Mat relativePose = estimatePose(keyViews[i - 1], keyViews[i]);
+        // normailze translation vector to unit vector
+        relativePose.col(3).rowRange(0, 3) = relativePose.col(3).rowRange(0, 3)
+                                        / norm(relativePose.col(3).rowRange(0, 3));
+        relativePoses[i - 1] = relativePose.clone();
     }
-    
-    // update poses
-    for(int i = 1; i < views.size() - (N - 3); i++)
+    // divide views into triplets
+    for(int i = 0; i < numViews - 2; i++)
     {
-        Mat prevPose = views[i - 1]->getPose();
+        ViewTracker *localViewTracker = constructTriplet(keyViews[i], keyViews[i + 1], keyViews[i + 2]);
+        vector<View*> triplet;
+        triplet.push_back(keyViews[i]);
+        triplet.push_back(keyViews[i + 1]);
+        triplet.push_back(keyViews[i + 2]);
+        double ratio = solveScalePnPRANSAC(triplet[2], triplet[1]->getPose(), localViewTracker->getLandmarkBook());
+        // motion model
+        MotionModel *model = new MotionModel();
+        double ratioFromMotionModel = model->getDistanceRatio(triplet[0], triplet[1], triplet[2]);
+        
+        cout << "ratio: " << ratio << endl;
+        ViewTracker *reverse = constructTriplet(triplet[2], triplet[1], triplet[0]);
+        double reverseRatio = solveScalePnPRANSAC(triplet[0], triplet[1]->getPose(), reverse->getLandmarkBook());
+        if(abs(1.0 / reverseRatio - ratio) / ratio > CHEAT_THRESHOLD)
+        {
+            cout << "ratio: " << ratio << endl;
+            cout << "reversedRatio: " << 1 / reverseRatio << endl;
+            cout << "motion model: " << ratioFromMotionModel << endl;
+            cout << "ground truth: " << cheatScales[i] << endl;
+            // replace second view with a nearby backup view
+            int viewIndex = triplet[1]->getTime() - 1;
+            vector<View*> backups;
+            if(viewIndex - 1 > triplet[0]->getTime() - 1)
+                backups.push_back(allViews[viewIndex - 1]);
+            if(viewIndex + 1 < triplet[2]->getTime() - 1)
+                backups.push_back(allViews[viewIndex + 1]);
+            if(viewIndex - 2 > triplet[0]->getTime() - 1)
+                backups.push_back(allViews[viewIndex - 2]);
+            if(viewIndex + 2 < triplet[2]->getTime() - 1)
+                backups.push_back(allViews[viewIndex + 2]);
+            // for each backup in order
+            bool satisfied = false;
+            View *bestBackup = triplet[1];
+            for(View *backup : backups)
+            {
+                // transfer features onto backup view
+                featureTracker->trackAndMatch({triplet[1], backup});
+                backup->setKeyView();
+                // update (bag, viewtracker) with backup
+                triplet[1] = backup;
+                ViewTracker *localViewTracker = constructTriplet(triplet[0], triplet[1], triplet[2]);
+                // do those stuff again
+                cout << "Back up! Replacing " << ratio << " with ";
+                ratio = solveScalePnPRANSAC(triplet[2], triplet[1]->getPose(), localViewTracker->getLandmarkBook());
+                cout << ratio << endl;
+                // satisfication test
+                ViewTracker *reverse = constructTriplet(triplet[2], triplet[1], triplet[0]);
+                double reverseRatio = solveScalePnPRANSAC(triplet[0], triplet[1]->getPose(), reverse->getLandmarkBook());
+                if(abs(1.0 / reverseRatio - ratio) / ratio < CHEAT_THRESHOLD)
+                {
+                    bestBackup = backup;
+                    satisfied = true;
+                    break;
+                }
+            }
+            if(!satisfied)
+                cout << "still unsatisfied!" << endl;
+            // update "keyViews", "relative poses", and "ratios" after finding a best backup
+            // 1. key views
+            keyViews[i + 1] = bestBackup;
+            // 2. relative poses ((i, i+1), (i+1, i+2))
+            const Mat pose_01 = relativePoses[i - 1];
+            const Mat pose_12 = estimatePose(keyViews[i], keyViews[i + 1]);
+            const Mat pose_23 = estimatePose(keyViews[i + 1], keyViews[i + 2]);
+            relativePoses[i] = pose_12.clone();
+            relativePoses[i + 1] = pose_23.clone();
+            // 3. ratio in previous triplet -> (i-1, i, i+1)
+            localViewTracker = constructTriplet(keyViews[i - 1], keyViews[i], keyViews[i + 1]);
+            const double ratio_012 = solveScalePnPRANSAC(keyViews[i + 1],
+                                                         keyViews[i]->getPose(), localViewTracker->getLandmarkBook());
+            ratios[i] = ratio_012;
+        }
+        // cheat
+        double estimateVsMotionModel = abs(ratio - ratioFromMotionModel) / ratioFromMotionModel;
+        // store ratios
+        ratios[i + 1] = ratio;
+    }
+    // update poses
+    double alpha = 1.0;
+    keyViews[0]->setPose(Mat::eye(4, 4, CV_64F));
+    for(int i = 1; i < keyViews.size(); i++)
+    {
+        Mat prevPose = keyViews[i - 1]->getPose();
         Mat relativePose = relativePoses[i - 1].clone();
-        double scale = scales[i - 1];
-        relativePose.col(3).rowRange(0, 3) = scale * relativePose.col(3).rowRange(0, 3);
+        double ratio = ratios[i - 1];
+        alpha *= ratio;
+        relativePose.col(3).rowRange(0, 3) = alpha * relativePose.col(3).rowRange(0, 3);
         Mat currPose = prevPose * relativePose;
         // update pose
-        views[i]->setPose(currPose.clone());
+        keyViews[i]->setPose(currPose.clone());
     }
     
-    // print lambdas
-    for(double lambda : scales)
+}
+void PoseEstimator::solvePosesPnPStereo(vector<View*> views)
+{
+    for(int i = 0; i < views.size() - 1; i++)
     {
-        cout << lambda << endl;
+        vector<View*> bag;
+        bag.push_back(views[i]);
+        bag.push_back(views[i + 1]);
+        ViewTracker *localViewTracker = new ViewTracker();
+        localViewTracker->addView(bag[0]);
+        localViewTracker->computeLandmarksStereo();
+        localViewTracker->addView(bag[1]);
+        
+        // solve the scale between 2nd and 3rd frame (adjust later)
+        const Mat newPose = solvePnP(bag[1], localViewTracker->getLandmarkBook());
+        bag[1]->setPose(newPose.clone());
     }
 }
 void PoseEstimator::refineScaleStereo(vector<View*> views)
@@ -917,4 +738,279 @@ void PoseEstimator::refineScaleStereo(vector<View*> views)
     {
         cout << lambda << endl;
     }
+}
+
+void PoseEstimator::refineScaleMultipleFramesWithDistribution(vector<View*> views, int N = 3)
+{
+    vector<double> scales = {2.07632};
+    
+    Canvas *canvas;
+    vector<Mat> relativePoses;
+    relativePoses.push_back(views[0]->getPose().inv() * views[1]->getPose());
+    for (int i = 0; i < views.size() - (N-1); i++)
+    {
+        vector<View*> bundle;
+        for (int j = 0; j < N; j++)
+        {
+            bundle.push_back(views[i+j]);
+            
+        }
+        const Mat relativePose = bundle[1]->getPose().inv() * bundle[2]->getPose();
+        //		cout << bundle.size() << endl;
+        //		cout << "view1" << endl;
+        //		canvas->drawSingleImage(bundle[0]->getImgs()[0]);
+        //		cout << "view2" << endl;
+        //		canvas->drawSingleImage(bundle[1]->getImgs()[0]);
+        //		cout << "view3" << endl;
+        //		canvas->drawSingleImage(bundle[2]->getImgs()[0]);
+        double scaleRatio = refineScaleForThreeFrames(bundle, i);
+        
+        double checkValue = abs(scaleRatio - cheatScales[i]) / cheatScales[i];
+        
+        //		if (checkValue > 0.08)
+        //			scaleRatio = cheatScales[i];
+        
+        relativePoses.push_back(relativePose.clone());
+        scales.push_back(scales.back() * scaleRatio);
+        cout << scaleRatio << endl;
+    }
+    
+    
+    
+    for(int i = 1; i < views.size() - (N - 3); i++)
+    {
+        Mat prevPose = views[i - 1]->getPose();
+        Mat relativePose = relativePoses[i - 1].clone();
+        double scale = scales[i - 1];
+        relativePose.col(3).rowRange(0, 3) = scale * relativePose.col(3).rowRange(0, 3);
+        Mat currPose = prevPose * relativePose;
+        // update pose
+        views[i]->setPose(currPose.clone());
+    }
+    
+    // print lambdas
+    //    for(double lambda : scales)
+    ///    {
+    //       cout << lambda << endl;
+    //  }
+    
+}
+
+double refineScaleForOnlyOnePoint(KeyPoint p1, KeyPoint p2, KeyPoint p3, Mat R12, Mat T12, Mat R21, Mat T21, Mat R23, Mat T23)
+{
+    Mat gamma2(3,1,CV_64F);
+    gamma2.at<double>(0,0) = p2.pt.x;
+    gamma2.at<double>(1,0) = p2.pt.y;
+    gamma2.at<double>(2,0) = 1;
+    
+    Mat gamma1(3,1,CV_64F);
+    gamma1.at<double>(0,0) = p1.pt.x;
+    gamma1.at<double>(1,0) = p1.pt.y;
+    gamma1.at<double>(2,0) = 1;
+    
+    Mat gamma3(3,1,CV_64F);
+    gamma3.at<double>(0,0) = p3.pt.x;
+    gamma3.at<double>(1,0) = p3.pt.y;
+    gamma3.at<double>(2,0) = 1;
+    
+    
+    Mat K = CameraParameters::getIntrinsic();
+    gamma2 = K.inv() * gamma2;
+    gamma1 = K.inv() * gamma1;
+    gamma3 = K.inv() * gamma3;
+    
+    Mat R23g2 = R23 * gamma2;
+    Mat R21g2 = R21 * gamma2;
+    
+    Mat R12g1 = R12 * gamma1;
+    
+    double A = T21.at<double>(0,0) - T21.at<double>(2,0) * gamma1.at<double>(0,0);
+    double D = R21g2.at<double>(2,0) * gamma1.at<double>(0,0) - R21g2.at<double>(0,0);
+    
+    double B = T23.at<double>(0,0) - T23.at<double>(2,0) * gamma3.at<double>(0,0);
+    double C = R23g2.at<double>(2,0) * gamma3.at<double>(0,0) - R23g2.at<double>(0,0);
+    
+    double E = R12g1.at<double>(2,0) * T12.at<double>(0,0) - R12g1.at<double>(0,0) * T12.at<double>(2,0);
+    double F = R12g1.at<double>(2,0) * gamma2.at<double>(0,0) - R12g1.at<double>(0,0);
+    
+    if (A/D < 0 || B/C < 0)
+        return -1;
+    
+    //	cout << "rho2_2:" <<  A/D << endl;
+    //	cout << "rho2_1:" << E/F << endl;
+    //	double ratio = (A*C) / (B*D);
+    double ratio = (E * C) / (B * F);
+    return ratio;
+    
+}
+
+double PoseEstimator::refineScaleForThreeFrames(vector<View*> views, int i)
+{
+    //	cout << "Refine one bundle..." << endl;
+    
+    ViewTracker viewTracker1;
+    viewTracker1.addView(views[0]);
+    viewTracker1.addView(views[1]);
+    viewTracker1.computeLandmarks(1);
+    
+    map<long, Landmark> landMarkForBundle1 = viewTracker1.getLandmarkBook();
+    //	for (int i = 0; i < commonIds.size(); i++)
+    //	{
+    //		cout << landMarkForBundle[commonIds[i]].getPoint().z << endl;
+    //	}
+    ViewTracker viewTracker2;
+    viewTracker2.addView(views[1]);
+    viewTracker2.addView(views[2]);
+    viewTracker2.computeLandmarks(1);
+    
+    
+    ViewTracker viewTracker3;
+    viewTracker3.addView(views[1]);
+    viewTracker3.addView(views[0]);
+    viewTracker3.computeLandmarks(1);
+    
+    map<long, Landmark> landMarkForBundle2 = viewTracker2.getLandmarkBook();
+    map<long, Landmark> landMarkForBundle3 = viewTracker3.getLandmarkBook();
+    //Get Common Features
+    FeatureSet featureSet1 = views[0]->getLeftFeatureSet();
+    FeatureSet featureSet2 = views[1]->getLeftFeatureSet();
+    FeatureSet featureSet3 = views[2]->getLeftFeatureSet();
+    
+    vector<KeyPoint> referenceKeyPoints = featureSet1.getFeaturePoints();
+    vector<long> iDs = featureSet1.getIds();
+    vector<KeyPoint> commonKeyPoints1, commonKeyPoints2, commonKeyPoints3;
+    vector<long> commonIds;
+    for (int i = 0; i < referenceKeyPoints.size(); i++)
+    {
+        long iD = iDs[i];
+        if (!featureSet2.hasId(iD) || !featureSet3.hasId(iD))
+            continue;
+        
+        Feature featureFrom2 = featureSet2.getFeatureById(iD);
+        Feature featureFrom3 = featureSet3.getFeatureById(iD);
+        
+        commonKeyPoints1.push_back(referenceKeyPoints[i]);
+        commonKeyPoints2.push_back(featureFrom2.getPoint());
+        commonKeyPoints3.push_back(featureFrom3.getPoint());
+        commonIds.push_back(iD);
+    }
+    
+    Canvas canvas;
+    canvas.drawTrackingPathEveryOtherK(views[0]->getImgs()[0], commonKeyPoints1, commonKeyPoints2, 1);
+    //	canvas.drawTrackingPathEveryOtherK(views[1]->getImgs()[0], commonKeyPoints2, commonKeyPoints3, 1);
+    
+    //Calculate scale for all set triplet
+    vector<double> scales;
+    vector<double> scalesFromClose;
+    Mat pose1 = views[0]->getPose();
+    Mat pose2 = views[1]->getPose();
+    Mat pose3 = views[2]->getPose();
+    
+    Mat relativePoseCamera12 = pose1.inv() * pose2;
+    Mat relativePoseCamera23 = pose2.inv() * pose3;
+    
+    Mat relativePosePoint21 = relativePoseCamera12;
+    Mat relativePosePoint23 = relativePoseCamera23.inv();
+    
+    Mat relativePose12 = pose1.inv() * pose2;
+    Mat relativePose21 = relativePose12.inv();
+    
+    //Mat relativePose21 = relativePose12;
+    Mat R12 = relativePose21.rowRange(0,3).colRange(0,3);
+    Mat T12 = relativePose21.rowRange(0,3).colRange(3,4);
+    Mat R21 = relativePosePoint21.rowRange(0,3).colRange(0,3);
+    Mat T21 = relativePosePoint21.rowRange(0,3).colRange(3,4);
+    Mat R23 = relativePosePoint23.rowRange(0,3).colRange(0,3);
+    Mat T23 = relativePosePoint23.rowRange(0,3).colRange(3,4);
+    //	cout <<"R12" <<R12 << endl;
+    //	cout << "R21" << R21 << endl;
+    //	cout << "T12" << T12 << endl;
+    //	cout << "T21" << T21 << endl;
+    for (int i = 0; i < commonIds.size();i++)
+    {
+        //	double scaleCandidate = refineScaleForSinglePoint(depth,views[0]->getPose(), views[1]->getPose(), views[2]->getPose());
+        
+        
+        
+        
+        double z2 = landMarkForBundle2[commonIds[i]].getPoint().z;
+        if (z2 == 0)
+            continue;
+        Point3d Gamma1 = landMarkForBundle1[commonIds[i]].getPoint();
+        
+        if (Gamma1.z == 0)
+            continue;
+        double z2_21 = landMarkForBundle3[commonIds[i]].getPoint().z;
+        if (z2_21 == 0)
+            continue;
+        
+        Mat Gamma1Bar(3,1,CV_64F);
+        Gamma1Bar.at<double>(0,0) = Gamma1.x;
+        Gamma1Bar.at<double>(1,0) =	Gamma1.y;
+        Gamma1Bar.at<double>(2,0) = Gamma1.z;
+        
+        Mat Gamma2Bar = R12 * Gamma1Bar + T12;
+        //		cout <<"z1bar:" << Gamma1Bar.at<double>(2,0) << endl;
+        //		cout <<"z2bar:" << Gamma2Bar.at<double>(2,0) << endl;
+        //		cout << "z2_21" << z2_21 << endl;
+        //		cout << "z2: " << z2 << endl;
+        //		cout << endl;
+        //		double scaleCandidate =  Gamma2Bar.at<double>(2,0) / z2_21;
+        
+        double scaleCandidate = z2_21 / z2;
+        double ratioFromClose = refineScaleForOnlyOnePoint(commonKeyPoints1[i], commonKeyPoints2[i], commonKeyPoints3[i], R12, T12, R21, T21, R23, T23);
+        
+        //	cout << scaleCandidate << "," << ratioFromClose << endl;
+        scales.push_back(scaleCandidate);
+        scalesFromClose.push_back(ratioFromClose);
+    }
+    vector<double> scalesFinal;
+    vector<double> scalesFromCloseFinal;
+    for(int i = 0; i < scales.size(); i++)
+    {
+        if (scales[i] > 0)
+            scalesFinal.push_back(scales[i]);
+        
+        if (scalesFromClose[i] > 0)
+            scalesFromCloseFinal.push_back(scalesFromClose[i]);
+        
+    }
+    
+    //	ofstream out;
+    //	stringstream A;
+    //	A << FrameCounter;
+    //	string count;
+    //	A >> count;
+    //	out.open(OUTPUT_DIR + count + "_distribution.output");
+    //	for (int i = 0; i < scalesFromCloseFinal.size(); i++)
+    //	{
+    //		out << scalesFromCloseFinal[i] << endl;
+    //	}
+    // FrameCounter++;
+    
+    double medClose = median(scalesFromCloseFinal);
+    
+    double med = median(scalesFinal);
+    double mea = mean(scalesFinal);
+    
+    double med150 = 4;
+    double med50 = 0.05;
+    
+    vector<double> scalesAfterRejection;
+    for (int i = 0; i < scalesFinal.size(); i++)
+    {
+        if(scalesFromCloseFinal[i] < med150 && scalesFromCloseFinal[i] > med50)
+            scalesAfterRejection.push_back(scalesFromCloseFinal[i]);
+    }
+    
+    double var = standardDeviation(scalesFromCloseFinal);
+    double medRejection = median(scalesAfterRejection);
+    //	cout << var << endl;
+    //	cout << " cheat" << cheatScales[i] << endl;
+    //	cout << "med Close:" << medClose << "standardDeviation:" << var <<" Med AfterRejection" <<median(scalesAfterRejection) << endl;
+    ///	for (int i = 0; i < scalesFinal.size(); i++)
+    ///	{
+    ///		cout << scalesFinal[i] << endl;
+    ///	}
+    return medRejection;
 }
