@@ -8,11 +8,218 @@
 
 #include "PoseEstimator.h"
 
-vector<double> cheatScales = {1.666241,0.800249,0.748682,1.711935,0.828371,1.025557,1.275837,1.026220,1.480863,1.103866,0.729757,0.976683,1.084049,1.438873,0.670365,0.582779,0.450772,1.448474,0.662443,1.027766,1.331040,1.154723,1.405345,1.407354,1.333145,0.912764,0.709861,0.984781,0.975777,1.506748,1.563540,0.217583,0.232662,3.027510,0.658222,2.034488,1.799758,1.812118,1.227126,0.950643,1.318482,0.811185,1.280838,0.576791,0.570822,1.520571,1.510023,1.228051,0.743973,1.008386,0.614489,0.596107,0.978324,0.864355,2.333449,1.896180,0.640915,0.782261,0.871269,0.974426,1.914865,0.528815,0.212948,1.929174,1.830854,1.004487,1.593402,0.581100,1.115711,2.176555,1.014946,0.628328,1.170360,1.288439,0.487221,0.976390,1.402194,1.860286,0.767178,0.500938,0.767117,0.839335,0.951688,1.455409,1.654124,1.170944,1.296370,0.540124,1.584478,0.864527,0.808824,1.501817,0.817148,1.188460,1.163970,0.724989,0.815404,1.530691,1.156425,0.839259,0.950604,1.228683,1.272580,0.739569,0.569657,0.371232,1.033340,1.066163,1.438987,0.796792,2.136555,0.728898,1.369799,1.099692,0.623010,1.360085,0.750018,1.323362,1.244691,0.789559,1.243554,0.794218,0.985690,0.992094,2.091680,0.782627,0.822363,0.789543,0.908639,0.864974,1.099440,2.781630,0.776676,0.580868,0.990909,0.989941,0.990680,0.990967,0.993058,1.232982,1.366406,0.928039,0.623520,1.173466,0.991301,0.825388,0.433559,1.380674,0.803948,1.794476,1.068898,1.095241,1.551975,0.778018,0.840929,1.525656,1.002981,0.673819,1.264209,1.395414,0.565178,1.233604,0.596743,1.991309,0.847334,0.611083,1.343826,1.270667,1.202904,1.006931,0.839503,1.007812,0.788033,0.987285,0.974707,0.715064,1.264676,1.393109,0.723542,0.845351,1.266086,0.813183,0.445541,1.076464,1.496923,1.730704,1.324240,1.083686,1.081012,0.917896,0.677163,1.498367,0.992709,1.108572,0.521193,1.291678,0.454738,1.647977,1.352162,0.974968,0.421594,0.980059,0.655466,2.526757,2.331233,1.117516,0.163606,0.945491,1.265554,1.985191,1.461934,0.786565,1.130889,1.098075,1.257344,1.052947,1.033520,0.668610,1.680027,0.695037,1.919005,0.874569,0.702109,1.365090,0.532847,0.454239,0.960345,1.465649,2.068871,1.464729,1.074825,0.550572,1.050662,0.771725,2.049678,0.680313,1.015148,1.019203,1.018805,1.279704,1.226678,0.506395,1.341078,1.262156,0.797957,0.996974,1.235668,0.784637,1.189462,1.619219,0.736547,0.959298,0.490023,0.481250,0.974469,1.683914,1.187277,0.858059,0.863196,1.642733,1.552866,1.138682,0.753919,0.656649,1.239707,1.225866,2.091932,0.652131,0.630636,1.635318,0.912151,0.750542,1.198467,0.819501,1.168487,1.129249,0.889777,0.965089,0.732285,1.056453,0.887208,0.841348,1.062086,1.594375,1.068093,0.671070,1.251893,0.792319,0.988378,0.742517,1.653920,0.765157,1.142440,0.700039,0.670250,1.858097,1.124085,0.600060,0.786161,1.745906,1.701633,0.659223,0.826426,0.758729,1.668804,1.233532,1.578037,0.561532,0.606423,1.321355,1.277205,1.435843,0.724897,1.005432,0.989090,0.985988,1.556597,0.355398,0.959168,1.238280,0.874505,1.127334,0.799029,1.592464,0.726141,0.388521,1.255998,1.427626,1.020177,0.983927,1.463410,1.533251,0.724982,1.684077,0.725101,1.030066,0.780582,2.379166,0.729036,0.597154,2.356136,0.430072,0.993816,1.673410,0.995161,0.595955,0.994976,1.669021,0.591014,0.675873,1.979918,1.002545,0.986736,0.740632,0.995501,0.989891,0.981611,2.237742,1.149431,0.793931,1.114399,0.332031,1.389332,0.781387,0.976210,1.045884,1.528042,1.527067,1.297715,0.665773,1.220570,0.991195,1.350988,0.762820,1.331583,0.372410,1.319634,0.984131,0.982904,1.676344,1.363435,0.559356,1.187674,0.918568,0.913346,1.098675,1.309616,1.114276,0.567836,1.372982,0.660474,1.029893,0.999295,0.685735,1.028342,1.326814,1.138968,1.540939,0.697308,1.062799,0.816489,0.754759,1.324701,1.229344,0.974498,0.400587,1.965136,0.494951,1.485558,1.286103,0.706659,1.236207,1.673517,0.549325,0.971487,0.795130,1.011615,1.328084,1.760806,0.547155,2.378294,1.375177,1.130007,0.891058,0.445940,0.993196,1.241108,0.999816,1.190507,0.982887,1.150523,0.847479,1.493088,0.785383,1.294021,1.090816,0.986691,0.942445,0.657206,0.615839,1.096933,1.776241,0.680509,0.850014,1.525037,1.484613,0.762192,0.823960,0.618436,1.594973,1.182188,0.666994,0.361992,0.714107,1.273135,1.046517,1.780579,1.890309,1.541070,0.734995,0.761551,0.823019,1.014142,1.755712,1.131129,0.737524,0.647642,0.988518,0.989393,0.983268,1.483674,0.659918,0.989874,1.717066,0.986281,0.844095,0.980907,0.812715,1.776797,0.526753,1.036164,0.655835,0.799935,1.162186,1.261168,1.226328,0.922632,1.399094,0.646251,1.016604,1.336511,1.745169,0.990630,1.126386,0.744442,0.689211,1.031646,0.750187,1.333135,1.499744,0.825226,1.552633,1.056054,0.203552,1.219346,1.073142,1.340707,0.636613,1.446532,1.368619,1.835769,0.701639,1.072550,0.825968,1.015630,1.267090,1.000231,0.398753,1.485709,1.320569,0.985033,0.986474,0.740687,1.316754,2.331570,0.589799,1.028195,0.595806,0.412810,1.332034,1.094480,1.084813,1.074877,1.692381,2.001486,0.702744,0.524406,1.709569,0.811866,0.997623,0.999846,1.250523,0.403719,2.044699,2.328864,0.688667,1.340571,0.493851,0.993320,1.491530,0.659650,0.735875,1.336749,1.452411,0.492645,0.961574,0.641538,1.457935,1.529507,0.899368,0.529699,0.905736,0.896703,1.178610,0.449171,0.942428,1.483614,1.971636,0.700457,1.382293,0.904990,2.581933,0.674959,1.357151,0.928619,0.621583,1.011239,1.332909,0.984647,1.235100,0.789205,0.494736,1.485654,0.987088,1.258509,0.898100,1.223923,0.991985,0.820948,0.715055,1.087850,1.299158,1.447123,0.580224,2.972483,0.359674,0.332979,2.495678,1.498533,0.462990,3.166619,0.745361,1.117403,1.323481,1.100084,0.683781,0.995793,1.240161,0.782757,0.964371,1.373078,1.313833,0.836729,0.475231,0.816509,0.778789,1.193036,1.462991,1.981347,1.383894,0.501604,1.326409,1.041122,0.809125,1.261929,1.208909,1.007701,1.008935,0.664019,1.246284,0.987332,1.171585,0.777773,1.289504,1.193621,0.888272,0.446655,0.578353,0.766010,1.377660,0.539801,1.534164,1.458925,1.402713,1.136001,1.105687,0.866249,0.784057,1.034883,1.358746,1.264602,0.799216,0.991531,0.744895,1.312646,1.211666,1.944192,0.258504,1.689493,0.834477,1.063966,1.066265,2.166214,0.662629,0.798044,0.741727,1.329013,0.744914,1.318915,0.750787,1.313198,1.477542,0.812018,0.788257,1.503530,0.671847,0.507517,1.502682,2.032068,1.020776,0.500122,1.652190,0.590818,1.587846,0.747337,1.156350,1.041672,1.404954,0.474662,1.018330,0.912076,2.391066,0.411151,0.795640,0.791044,0.849038,1.102791,1.104565,1.100325,2.661929,0.487057,1.824908,0.649865,1.390832,1.306637,0.823986,0.999519,1.237513,0.594503,1.321930,0.495413,1.988564,1.245544,0.803370,1.008766,0.504019};
+
+
+
 
 PoseEstimator::PoseEstimator()
 {
     
+}
+double evaluateTrinocularReprojectionError(const double *par, const void *data, double *fvec)
+{
+    double lambda = *par;
+    // unpack data
+    Trinocular* t = (Trinocular*)data;
+    vector<vector<KeyPoint>> keyPoints = t->keyPoints;
+    Mat leftPoseToV = t->left.clone();
+    Mat rightPoseToV = t->right.clone();
+    vector<bool> status = vector<bool>(keyPoints.size(), false);
+    
+    leftPoseToV.col(3).rowRange(0, 3) = leftPoseToV.col(3).rowRange(0, 3) * lambda;
+    rightPoseToV = CameraParameters::getStereoPose().inv() * leftPoseToV;
+    const Mat R1 = leftPoseToV.rowRange(0, 3).colRange(0, 3).inv();
+    const Mat T1 = -R1 * leftPoseToV.rowRange(0, 3).col(3);
+    const Mat R2 = rightPoseToV.rowRange(0, 3).colRange(0, 3).inv();
+    const Mat T2 = -R2 * rightPoseToV.rowRange(0, 3).col(3);
+    const Mat E1 = Converter::tVecToTx(T1) * R1;
+    const Mat E2 = Converter::tVecToTx(T2) * R2;
+    const Mat F1 = CameraParameters::getIntrinsic().inv().t() * E1 * CameraParameters::getIntrinsic().inv();
+    const Mat F2 = CameraParameters::getIntrinsic().inv().t() * E2 * CameraParameters::getIntrinsic().inv();
+    
+    double totalError = 0.0;
+    int inlierCount = 0, totalCount = 0;
+    const double delta = sqrt(REPROJECTION_THRESHOLD * REPROJECTION_THRESHOLD / 2);
+    for(int i = 0; i < keyPoints.size(); i++)
+    {
+        KeyPoint kp1 = keyPoints[i][0], kp2 = keyPoints[i][1], kp = keyPoints[i][2];
+        Mat p1(3, 1, CV_64F), p2(3, 1, CV_64F), p(3, 1, CV_64F);
+        p1.at<double>(0, 0) = kp1.pt.x;
+        p1.at<double>(1, 0) = kp1.pt.y;
+        p1.at<double>(2, 0) = 1;
+        p2.at<double>(0, 0) = kp2.pt.x;
+        p2.at<double>(1, 0) = kp2.pt.y;
+        p2.at<double>(2, 0) = 1;
+        p.at<double>(0, 0) = kp.pt.x;
+        p.at<double>(1, 0) = kp.pt.y;
+        p.at<double>(2, 0) = 1;
+        const Mat line1 = F1 * p1, line2 = F2 * p2;
+        const double a1 = line1.at<double>(0, 0), b1= line1.at<double>(1, 0), c1 = line1.at<double>(2, 0);
+        const double a2 = line2.at<double>(0, 0), b2= line2.at<double>(1, 0), c2 = line2.at<double>(2, 0);
+        const double x_hat = (b1 * c2 - b2 * c1) / (a1 * b2 - a2 * b1);
+        const double y_hat = -(a1 * c2 - a2 * c1) / (a1 * b2 - a2 * b1);
+        double err_x = x_hat - kp.pt.x;
+        double err_y = y_hat - kp.pt.y;
+        
+        if(fvec != NULL)
+        {
+            *(fvec++) = huber(err_x, delta, false);
+            *(fvec++) = huber(err_y, delta, false);
+        }
+        double reprojectionError = sqrt(err_x * err_x + err_y * err_y);
+        if(reprojectionError < REPROJECTION_THRESHOLD)
+        {
+            status[i] = true;
+            inlierCount++;
+        }
+        else
+            status[i] = false;
+        totalCount++;
+        totalError += reprojectionError;
+    }
+    t->status = vector<bool>(status);
+    t->inlierRatio = double(inlierCount) / totalCount;
+    return totalError;
+}
+
+void evaluateTrinocularReprojectionError(const double *par, const int nEqs, const void *data, double *fvec,int *userBreak)
+{
+    evaluateTrinocularReprojectionError(par, data, fvec);
+}
+double PoseEstimator::estimateScaleTrinocularRANSAC(View *stereo, View *v)
+{
+    const Mat leftPoseToV = estimatePose(stereo, v);
+    const Mat rightPoseToV = CameraParameters::getStereoPose().inv() * leftPoseToV;
+    
+    // find common features
+    vector<vector<KeyPoint>> keyPoints;
+    map<long, int> commonIds;
+    FeatureSet featureSet_stereoLeft = stereo->getLeftFeatureSet();
+    FeatureSet featureSet_stereoRight = stereo->getRightFeatureSet();
+    FeatureSet featureSet_v = v->getLeftFeatureSet();
+    for(int i = 0; i < featureSet_stereoLeft.size(); i++)
+    {
+        long id = featureSet_stereoLeft.getIds()[i];
+        if(!commonIds.count(id))
+            commonIds[id] = 0;
+        commonIds[id]++;
+    }
+    for(int i = 0; i < featureSet_stereoRight.size(); i++)
+    {
+        long id = featureSet_stereoRight.getIds()[i];
+        if(!commonIds.count(id))
+            commonIds[id] = 0;
+        commonIds[id]++;
+    }
+    for(int i = 0; i < featureSet_v.size(); i++)
+    {
+        long id = featureSet_v.getIds()[i];
+        if(!commonIds.count(id))
+            commonIds[id] = 0;
+        commonIds[id]++;
+    }
+    // remove non-common feature points
+    // record ids
+    for(map<long, int>::iterator it = commonIds.begin(); it != commonIds.end(); it++)
+    {
+        if(it->second == 3)
+        {
+            keyPoints.push_back({featureSet_stereoLeft.getFeatureById(it->first).getPoint(),
+                featureSet_stereoRight.getFeatureById(it->first).getPoint(),
+                featureSet_v.getFeatureById(it->first).getPoint()});
+        }
+    }
+    int N = 200;
+    int K = 3;
+    double maxInlierRatio = 0.0;
+    double bestLambda = .99;
+    vector<bool> inlierStatus;
+    for(int i = 0; i < N; i++)
+    {
+        // generate k random number between 0 and commonFeatures.size()
+        vector<vector<KeyPoint>> kpsRANSAC;
+        set<int> indices;
+        for(int k = 0; k < K; k++)
+        {
+            int index = rand() % keyPoints.size();
+            while(indices.count(index))
+            {
+                index = rand() % keyPoints.size();
+                indices.insert(index);
+            }
+            kpsRANSAC.push_back(keyPoints[index]);
+        }
+        
+        
+        Trinocular ransac(kpsRANSAC, leftPoseToV, rightPoseToV);
+        
+        // 2. nonlinear optimization (levenburg marquardt)
+        /* auxiliary parameters */
+        lm_control_struct control = lm_control_double;
+        lm_status_struct  status;
+        control.verbosity = 0;
+        
+        double lambda = .99;
+        double *par = &lambda;
+        const int nEqs = int(kpsRANSAC.size()) * 2;
+        lmmin(1, par, nEqs, &ransac, evaluateTrinocularReprojectionError, &control, &status);
+        
+        // test this lambda on entire dataset
+        Trinocular testData(keyPoints, leftPoseToV, rightPoseToV);
+        evaluateTrinocularReprojectionError(&lambda, &testData, NULL);
+        // record only the best set of data points and their corresponding ratio
+        double inlierRatio = testData.inlierRatio;
+        if(maxInlierRatio < inlierRatio)
+        {
+            maxInlierRatio = inlierRatio;
+            bestLambda = lambda;
+            inlierStatus = vector<bool>(testData.status);
+            if(inlierRatio > RANSAC_CONFIDENCE)
+                break;
+        }
+    }
+    
+    // final rounds
+    double lambda = bestLambda;
+    // inliers
+    vector<vector<KeyPoint>> inlierKps;
+    
+    for(int i = 0; i < inlierStatus.size(); i++)
+    {
+        if(inlierStatus[i])
+        {
+            inlierKps.push_back(keyPoints[i]);
+        }
+    }
+    for(int iter = 0; iter < 1; iter++)
+    {
+        // optimize this lambda on inlier dataset
+        Trinocular testData(inlierKps, leftPoseToV, rightPoseToV);
+        const int nEqs = int(inlierKps.size()) * 2;
+        // 2. nonlinear optimization (levenburg marquardt)
+        /* auxiliary parameters */
+        lm_control_struct control = lm_control_double;
+        lm_status_struct  status;
+        control.verbosity = 0;
+        
+        double *par = &lambda;
+        lmmin(1, par, nEqs, &testData, evaluateTrinocularReprojectionError, &control, &status);
+        
+        // update inliers
+        inlierStatus = vector<bool>(testData.status);
+        vector<vector<KeyPoint>> newInlierKps;
+        
+        for(int i = 0; i < inlierStatus.size(); i++)
+        {
+            if(inlierStatus[i])
+            {
+                newInlierKps.push_back(inlierKps[i]);
+            }
+        }
+        inlierKps = vector<vector<KeyPoint>>(newInlierKps);
+        
+    }
+    return lambda;
 }
 
 Mat PoseEstimator::estimatePose(View *v1, View *v2, double lambda)
@@ -139,7 +346,6 @@ double evaluateReprojectionError(const void *data, double *fvec)
         totalCount++;
         totalError += reprojectionError;
     }
-   
     pnpData->status = vector<bool>(status);
     pnpData->inlierRatio = double(inlierCount) / totalCount;
     return totalError;
@@ -289,6 +495,8 @@ double PoseEstimator::solveScalePnPRANSAC(View *v, const Mat prevPose, map<long,
             maxInlierRatio = inlierRatio;
             bestLambda = lambda;
             inlierStatus = vector<bool>(testData.status);
+            if(inlierRatio > RANSAC_CONFIDENCE)
+                break;
         }
     }
 
@@ -404,141 +612,7 @@ void evaluateQuadReprojectionError(const double *par, const int nEqs, const void
     // compute reprojection error
     evaluateQuadReprojectionError(data, lambda, fvec);
 }
-double PoseEstimator::refineScaleRANSAC(vector<View*> views, map<long, Landmark> &landmarkBook)
-{
-    // unpack 4 frames
-    View *v1 = views[0], *v2 = views[1], *v3 = views[2], *v4 = views[3];
-    // find common features in four frames
-    vector<vector<KeyPoint>> keyPoints;
-    vector<Point3d> landmarks;
-    multiset<long> commonIds;
-    FeatureSet featureSet_v1 = v1->getLeftFeatureSet();
-    FeatureSet featureSet_v2 = v2->getLeftFeatureSet();
-    FeatureSet featureSet_v3 = v3->getLeftFeatureSet();
-    FeatureSet featureSet_v4 = v4->getLeftFeatureSet();
-    for(int i = 0; i < featureSet_v1.size(); i++)
-    {
-        long id = featureSet_v1.getIds()[i];
-        commonIds.insert(id);
-    }
-    for(int i = 0; i < featureSet_v2.size(); i++)
-    {
-        long id = featureSet_v2.getIds()[i];
-        commonIds.insert(id);
-    }
-    for(int i = 0; i < featureSet_v3.size(); i++)
-    {
-        long id = featureSet_v3.getIds()[i];
-        commonIds.insert(id);
-    }
-    for(int i = 0; i < featureSet_v4.size(); i++)
-    {
-        long id = featureSet_v4.getIds()[i];
-        commonIds.insert(id);
-    }
-    // remove non-common feature points
-    // record ids
-    for(multiset<long>::iterator it = commonIds.begin(); it != commonIds.end(); it++)
-    {
-        if(commonIds.count(*it) == 4 && landmarkBook.count(*it))
-        {
-            landmarks.push_back(landmarkBook[*it].getPoint());
-            keyPoints.push_back({featureSet_v1.getFeatureById(*it).getPoint(),
-                                 featureSet_v2.getFeatureById(*it).getPoint(),
-                                 featureSet_v3.getFeatureById(*it).getPoint(),
-                                 featureSet_v4.getFeatureById(*it).getPoint()});
-        }
-    }
-    if(landmarks.size() < 20)
-        return 1.0;
-    // RANSAC
-    srand(time(NULL));
-    double maxInlierRatio = 0.0;
-    double bestLambda = 1.0;
-    vector<bool> inlierStatus;
-    int N = 100;
-    int K = 3;
-    for(int i = 0; i < N; i++)
-    {
-        // generate k random number between 0 and commonFeatures.size()
-        vector<Point3d> landmarksRANSAC;
-        vector<vector<KeyPoint>> keyPointsRANSAC;
-        set<long> indices;
-        for(int k = 0; k < K; k++)
-        {
-            long randomIndex = rand() % landmarks.size();
-            while(indices.count(randomIndex))
-                randomIndex = rand() % landmarks.size();
-            landmarksRANSAC.push_back(landmarks[randomIndex]);
-            keyPointsRANSAC.push_back(keyPoints[randomIndex]);
-        }
-        // lm
-        // 1 DoF
-        double lambda = .99;
-        
-        double *par = &lambda;
-        
-        Quadruple *quad =
-                new Quadruple(v1, v2, v3, v4, keyPointsRANSAC, landmarksRANSAC);
-        const int nEqs = int(landmarks.size()) * 2 * 2;
-        // 2. nonlinear optimization (levenburg marquardt)
-        /* auxiliary parameters */
-        lm_control_struct control = lm_control_double;
-        lm_status_struct  status;
-        
-        control.verbosity = 0;
-        
-        lmmin(1, par, nEqs, quad, evaluateQuadReprojectionError, &control, &status);
-        
-        
-        // test this lambda on entire dataset
-        Quadruple *completeDataStruct =
-                        new Quadruple(v1, v2, v3, v4, keyPoints, landmarks);
-        evaluateQuadReprojectionError(completeDataStruct, lambda, NULL);
-        // record only the best set of data points and their corresponding ratio
-        double inlierRatio = completeDataStruct->inlierRatio;
-        if(maxInlierRatio < inlierRatio)
-        {
-            maxInlierRatio = inlierRatio;
-            bestLambda = lambda;
-            inlierStatus = vector<bool>(completeDataStruct->status);
-        }
-    }
-    
-    
-    // final test
-    // take out inliers
-    vector<Point3d> inlierLandmarks;
-    vector<vector<KeyPoint>> inlierKeyPoints;
-    
-    for(int i = 0; i < inlierStatus.size(); i++)
-    {
-        if(inlierStatus[i])
-        {
-            inlierLandmarks.push_back(landmarks[i]);
-            inlierKeyPoints.push_back(keyPoints[i]);
-        }
-    }
-    double lambda = bestLambda;
-    
-    double *par = &lambda;
-    Quadruple *quad =
-                    new Quadruple(v1, v2, v3, v4, inlierKeyPoints, inlierLandmarks);
-    const int nEqs = int(inlierLandmarks.size()) * 2 * 2;
-    // 2. nonlinear optimization (levenburg marquardt)
-    /* auxiliary parameters */
-    lm_control_struct control = lm_control_double;
-    lm_status_struct  status;
-    
-    control.verbosity = 0;
-    
-    lmmin(1, par, nEqs, quad, evaluateQuadReprojectionError, &control, &status);
-    
-    cout << "quadruple lambda(set of " << inlierLandmarks.size() << "): " << lambda << endl;
-    cout << "final inliers: " << quad->inlierRatio * 100 << "%" << endl;
-    
-    return lambda;
-}
+
 
 // function : given three views in order, do the following:
 //            1) compute up-to-scale relative poses between each pair
@@ -572,30 +646,26 @@ void PoseEstimator::solveRatioInTriplets(vector<View*> keyViews, vector<View*> a
     FeatureTracker *featureTracker = new FeatureTracker();
     int numViews = int(keyViews.size());
     vector<double> ratios(numViews - 1, 1.0); // size = numViews - 1
+    vector<double> lambdas(numViews - 1, 1.0);
     vector<Mat> relativePoses(numViews - 1, Mat::eye(4, 4, CV_64F)); // size = numViews - 1
     Canvas *canvas = new Canvas();
+    double alpha = lambdas[0];
     // divide views into triplets
     for(int i = 0; i < numViews - 2; i++)
     {
+        cout << "keyframe: " << i + 1 << ", " << i + 2 << ", " << i + 3 << endl;
         ViewTracker *localViewTracker = constructTriplet(keyViews[i], keyViews[i + 1], keyViews[i + 2]);
         vector<View*> triplet;
         triplet.push_back(keyViews[i]);
         triplet.push_back(keyViews[i + 1]);
         triplet.push_back(keyViews[i + 2]);
         double ratio = solveScalePnPRANSAC(triplet[2], triplet[1]->getPose(), localViewTracker->getLandmarkBook());
-        // motion model
-        MotionModel *model = new MotionModel();
-        double ratioFromMotionModel = model->getDistanceRatio(triplet[0], triplet[1], triplet[2]);
-        
-        cout << "ratio: " << ratio << endl;
         ViewTracker *reverse = constructTriplet(triplet[2], triplet[1], triplet[0]);
         double reverseRatio = solveScalePnPRANSAC(triplet[0], triplet[1]->getPose(), reverse->getLandmarkBook());
-        double err = abs(1.0 / reverseRatio - ratio) / ratio;
-        if(err > CHEAT_THRESHOLD)
+        reverseRatio = 1.0 / reverseRatio;
+        double ratioErr = abs(reverseRatio - ratio) / min(ratio, reverseRatio);
+        if(ratioErr > RATIO_ERROR_THRESHOLD)
         {
-            cout << "ratio: " << ratio << endl;
-            cout << "reversedRatio: " << 1 / reverseRatio << endl;
-            cout << "motion model: " << ratioFromMotionModel << endl;
             // replace second view with a nearby backup view
             int viewIndex = triplet[2]->getTime() - 1;
             vector<View*> backups;
@@ -603,14 +673,9 @@ void PoseEstimator::solveRatioInTriplets(vector<View*> keyViews, vector<View*> a
                 backups.push_back(allViews[viewIndex - 1]);
             if(i + 3 < numViews && viewIndex + 1 < keyViews[i + 3]->getTime() - 1)
                 backups.push_back(allViews[viewIndex + 1]);
-            if(viewIndex - 2 > triplet[1]->getTime() - 1)
-                backups.push_back(allViews[viewIndex - 2]);
-            if(i + 3 < numViews && viewIndex + 2 < keyViews[i + 3]->getTime() - 1)
-                backups.push_back(allViews[viewIndex + 2]);
-            // for each backup in order
             bool satisfied = false;
             View *bestBackup = triplet[2];
-            double leastErr = err;
+            double leastRatioErr = ratioErr;
             for(View *backup : backups)
             {
                 // transfer features onto backup view
@@ -620,49 +685,28 @@ void PoseEstimator::solveRatioInTriplets(vector<View*> keyViews, vector<View*> a
                 triplet[2] = backup;
                 ViewTracker *localViewTracker = constructTriplet(triplet[0], triplet[1], triplet[2]);
                 // do those stuff again
-                cout << "Back up! Replacing " << ratio << " with ";
                 ratio = solveScalePnPRANSAC(triplet[2], triplet[1]->getPose(), localViewTracker->getLandmarkBook());
-                cout << ratio << endl;
                 // satisfication test
                 ViewTracker *reverse = constructTriplet(triplet[2], triplet[1], triplet[0]);
                 double reverseRatio = solveScalePnPRANSAC(triplet[0], triplet[1]->getPose(), reverse->getLandmarkBook());
-                double errOfBackup = abs(1.0 / reverseRatio - ratio) / ratio;
-                if(errOfBackup < CHEAT_THRESHOLD)
+                reverseRatio = 1.0 / reverseRatio;
+                ratioErr = abs(reverseRatio - ratio) / min(ratio, reverseRatio);
+                if(ratioErr < RATIO_ERROR_THRESHOLD)
                 {
                     bestBackup = backup;
                     satisfied = true;
                     break;
                 }
-                else if(errOfBackup < leastErr)
-                {
-                    bestBackup = backup;
-                    leastErr = errOfBackup;
-                }
-                
             }
             if(!satisfied)
                 cout << "still unsatisfied!" << endl;
-            // update "keyViews", "relative poses", and "ratios" after finding a best backup
-            // 1. key views
+            // reset key views
             keyViews[i + 2] = bestBackup;
-//            // 2. relative poses ((i, i+1), (i+1, i+2))
-//            const Mat pose_01 = relativePoses[i - 1];
-//            const Mat pose_12 = estimatePose(keyViews[i], keyViews[i + 1]);
-//            const Mat pose_23 = estimatePose(keyViews[i + 1], keyViews[i + 2]);
-//            relativePoses[i] = pose_12.clone();
-//            relativePoses[i + 1] = pose_23.clone();
-            // 3. ratio in previous triplet -> (i-1, i, i+1)
-//            localViewTracker = constructTriplet(keyViews[i - 1], keyViews[i], keyViews[i + 1]);
-//            const double ratio_012 = solveScalePnPRANSAC(keyViews[i + 1],
-//                                                         keyViews[i]->getPose(), localViewTracker->getLandmarkBook());
-//            ratios[i] = ratio_012;
         }
         // store ratios
         ratios[i + 1] = ratio;
-        
-        // cheat
-        double estimateVsMotionModel = abs(ratio - ratioFromMotionModel) / ratioFromMotionModel;
-        
+        alpha *= ratio;
+        lambdas[i + 1] = alpha;
     }
     
     // estimate up-to-scale relative poses
@@ -671,15 +715,22 @@ void PoseEstimator::solveRatioInTriplets(vector<View*> keyViews, vector<View*> a
         Mat relativePose = estimatePose(keyViews[i - 1], keyViews[i]);
         // normailze translation vector to unit vector
         relativePose.col(3).rowRange(0, 3) = relativePose.col(3).rowRange(0, 3)
-        / norm(relativePose.col(3).rowRange(0, 3));
+                                                / norm(relativePose.col(3).rowRange(0, 3));
         relativePoses[i - 1] = relativePose.clone();
     }
     
     // update poses
-    double alpha = 1.0;
+    for(View *v : allViews)
+    {
+        v->unsetKeyView();
+    }
     keyViews[0]->setPose(Mat::eye(4, 4, CV_64F));
+    keyViews[0]->setKeyView();
+    
+    alpha = 1.0;
     for(int i = 1; i < keyViews.size(); i++)
     {
+        keyViews[i]->setKeyView();
         Mat prevPose = keyViews[i - 1]->getPose();
         Mat relativePose = relativePoses[i - 1].clone();
         double ratio = ratios[i - 1];
@@ -689,6 +740,18 @@ void PoseEstimator::solveRatioInTriplets(vector<View*> keyViews, vector<View*> a
         // update pose
         keyViews[i]->setPose(currPose.clone());
     }
+    
+    // BA
+    ViewTracker *BATracker = new ViewTracker();
+    BATracker->addView(keyViews[0]);
+    for(int i = 1; i < keyViews.size(); i++)
+    {
+        BATracker->addView(keyViews[i]);
+        BATracker->computeLandmarks(false);
+        if(BATracker->getKeyViews().size() % 10 == 0)
+            BATracker->bundleAdjust(MOTION_STRUCTURE, GLOBAL_BA);
+    }
+    // BATracker->bundleAdjust(MOTION_STRUCTURE, GLOBAL_BA);
     
 }
 void PoseEstimator::solvePosesPnPStereo(vector<View*> views)
@@ -708,25 +771,33 @@ void PoseEstimator::solvePosesPnPStereo(vector<View*> views)
         bag[1]->setPose(newPose.clone());
     }
 }
-void PoseEstimator::refineScaleStereo(vector<View*> views)
+void PoseEstimator::refineScaleStereo(vector<View*> views, bool trinocular)
 {
     // optimize N-ples;
     vector<double> scales;
     vector<Mat> relativePoses;
+    
     for(int i = 0; i < views.size() - 1; i++)
     {
         vector<View*> bag;
         bag.push_back(views[i]);
         bag.push_back(views[i + 1]);
-        const Mat relativePose = bag[0]->getPose().inv() * bag[1]->getPose();
+        bag[0]->setPose(Mat::eye(4, 4, CV_64F));
+        const Mat relativePose = estimatePose(bag[0], bag[1]);
+        const Mat newPose = bag[0]->getPose() * relativePose;
+        bag[1]->setPose(newPose.clone());
         ViewTracker *localViewTracker = new ViewTracker();
         localViewTracker->addView(bag[0]);
-        FeatureTracker *featureTracker = new FeatureTracker();
         localViewTracker->computeLandmarksStereo();
         localViewTracker->addView(bag[1]);
         
         // solve the scale between 2nd and 3rd frame (adjust later)
-        double scale = solveScalePnPRANSAC(bag[1], bag[0]->getPose(), localViewTracker->getLandmarkBook());
+        double scale = .99;
+        // double scale = solveScalePnPRANSAC(bag[1], bag[0]->getPose(), localViewTracker->getLandmarkBook());
+        if(trinocular)
+            scale = estimateScaleTrinocularRANSAC(bag[0], bag[1]);
+        else
+            scale = solveScalePnPRANSAC(bag[1], bag[0]->getPose(), localViewTracker->getLandmarkBook());
         cout << "stereo scale(" << i + 1 << "): " << scale << endl;
         
         scales.push_back(scale);
@@ -743,12 +814,6 @@ void PoseEstimator::refineScaleStereo(vector<View*> views)
         Mat currPose = prevPose * relativePose;
         // update pose
         views[i]->setPose(currPose.clone());
-    }
-    
-    // print lambdas
-    for(double lambda : scales)
-    {
-        cout << lambda << endl;
     }
 }
 
@@ -777,7 +842,6 @@ void PoseEstimator::refineScaleMultipleFramesWithDistribution(vector<View*> view
         //		canvas->drawSingleImage(bundle[2]->getImgs()[0]);
         double scaleRatio = refineScaleForThreeFrames(bundle, i);
         
-        double checkValue = abs(scaleRatio - cheatScales[i]) / cheatScales[i];
         
         //		if (checkValue > 0.08)
         //			scaleRatio = cheatScales[i];

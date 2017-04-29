@@ -37,10 +37,18 @@ int main( int argc, char** argv )
     vector<Mat> Trs;
     vector<View*> views;
     MonocularOdometry *monocularOdometry = new MonocularOdometry();
-    monocularOdometry->run(reader, featureExtractor, featureTracker, viewTracker, poseEstimator, Trs, views);
+    // trinocualr
+    monocularOdometry->run(reader, featureExtractor, featureTracker, viewTracker, poseEstimator, views, TRINOCULAR);
     
     // save result to file
-    monocularOdometry->save(TRACK, views);
+    monocularOdometry->save(TRACK, views, "TrinocularStereo");
+    
+    // use the views above
+    // triangulation
+    monocularOdometry->run(reader, featureExtractor, featureTracker, viewTracker, poseEstimator, views, TRIANGULATION);
+    
+    // save result to file
+    monocularOdometry->save(TRACK, views, "ScalePnPStereo");
     
     return 0;
 }

@@ -17,17 +17,23 @@
 #define BUNDLE_ADJUSTMENT_LENGTH 5
 #define KEYFRAME_INTERVAL 5
 
-#define REPROJECTION_THRESHOLD 5.994
+#define REPROJECTION_THRESHOLD 5.0
 
-#define MOTION_ONLY 10
+#define MOTION_ONLY 1
 #define STRUCTURE_ONLY 2
 #define MOTION_STRUCTURE 3
 #define GLOBAL_BA true
 #define LOCAL_BA false
 
-#define CHEAT_THRESHOLD 0.1
+#define TRINOCULAR true
+#define TRIANGULATION false
 
-#define TRACK "07"
+#define RATIO_ERROR_THRESHOLD 0.08
+#define SPEED_ERROR_THRESHOLD 0.15
+
+#define RANSAC_CONFIDENCE 0.9
+
+#define TRACK "06"
 #define START_FRAME 0
 #define IMAGE_DIR "/Users/orangechicken/Documents/MATLAB/KITTI/"
 #define GROUNDTRUTH_DIR "/Users/orangechicken/Documents/MATLAB/KITTI/GroundTruth/poses/"

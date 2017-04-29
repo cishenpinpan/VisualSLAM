@@ -45,6 +45,7 @@ public:
     Mat getR();
     Mat getT();
     void setKeyView(){keyView = true;}
+    void unsetKeyView(){keyView = false;}
     bool isKeyView(){return keyView;}
     bool isStereo(){return stereo;}
     int getTime(){return time;}

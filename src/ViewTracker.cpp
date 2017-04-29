@@ -328,7 +328,7 @@ void ViewTracker::bundleAdjust(int option, bool global)
     if(option == MOTION_STRUCTURE)
         type = "MOTION_STRUCTURE";
     cout << "Performing " << type << " BA:" << endl;
-    optimizer.optimize(10);
+    optimizer.optimize(20);
     
     // save result
     // optimizer.save("/Users/orangechicken/Desktop/SLAM/g2o_data/firstOutput.g2o");

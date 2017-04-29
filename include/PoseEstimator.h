@@ -104,19 +104,34 @@ struct Quadruple
         status = vector<bool>(keyPoints.size(), false);
     }
 };
+struct Trinocular
+{
+    vector<vector<KeyPoint>> keyPoints;
+    Mat left, right;
+    double error, inlierRatio;
+    vector<bool> status;
+    Trinocular(const vector<vector<KeyPoint>> _keyPoints, const Mat _left, const Mat _right)
+    {
+        keyPoints = _keyPoints;
+        left = _left.clone();
+        right = _right.clone();
+        error = 0.0;
+        inlierRatio = 1.0;
+        status = vector<bool>(keyPoints.size(), false);
+    }
+};
 class PoseEstimator
 {
 public:
     PoseEstimator();
     Mat estimatePose(View *v1, View *v2, double lambda = 1.0);
     Mat solvePnP(View *v, map<long, Landmark> landmarkBook);
+    double estimateScaleTrinocularRANSAC(View *stereo, View *v);
     double solveScalePnP(View *v, const Mat prevPose,  map<long, Landmark> landmarkBook, double initial = 1.0);
     double solveScalePnPRANSAC(View *v, const Mat prevPose,  map<long, Landmark> landmarkBook, double initial = 1.0);
-    double refineScale(vector<View*> views, map<long, Landmark> &landmarkBook);
-    double refineScaleRANSAC(vector<View*> views, map<long, Landmark> &landmarkBook);
     ViewTracker* constructTriplet(View *v1, View *v2, View *v3);
     void solveRatioInTriplets(vector<View*> keyViews, vector<View*> allViews);
-    void refineScaleStereo(vector<View*> views);
+    void refineScaleStereo(vector<View*> views, bool trinocular);
     void solvePosesPnPStereo(vector<View*> views);
     void refineScaleMultipleFramesWithDistribution(vector<View*> views, int N);
 private:
