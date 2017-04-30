@@ -32,7 +32,7 @@ class MonocularOdometry
 {
 public:
     void run(ViewReader *_reader, FeatureExtractor *_extractor, FeatureTracker *_featureTracker,
-             ViewTracker *_viewTracker, PoseEstimator *_poseEstimator, vector<View*> &track, bool trinocular);
+             ViewTracker *_viewTracker, PoseEstimator *_poseEstimator, vector<View*> &track, bool trinocular, bool oneDRansac);
     void save(string _track, vector<View*> _views, string filename);
 private:
     vector<vector<double>> readGroundTruth(int numPoses, ViewReader* _reader);

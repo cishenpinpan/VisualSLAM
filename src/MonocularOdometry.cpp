@@ -12,7 +12,7 @@
 
 vector<int> keyFrames;
 
-void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtractor, FeatureTracker *featureTracker,    ViewTracker *viewTracker, PoseEstimator *poseEstimator, vector<View*> &views, bool trinocular)
+void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtractor, FeatureTracker *featureTracker,    ViewTracker *viewTracker, PoseEstimator *poseEstimator, vector<View*> &views, bool trinocular, bool oneDRansac)
 {
     // if views are not given
     if(!views.size())
@@ -55,7 +55,7 @@ void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtract
             
             featureTracker->kltTrack(prevView->getImgs()[0], currView->getImgs()[0],
                                      prevView->getLeftFeatureSet(), currView->getLeftFeatureSet(), false);
-            if(currView->getLeftFeatureSet().size() < 0.8 * lastKeyView->getLeftFeatureSet().size() ||
+            if(currView->getLeftFeatureSet().size() < 0.9 * lastKeyView->getLeftFeatureSet().size() ||
                currView->getLeftFeatureSet().size() < FEATURE_REDETECTION_TRIGGER)
             {
                 featureTracker->refineTrackedFeatures(lastKeyView->getImgs()[0], currView->getImgs()[0], lastKeyView->getLeftFeatureSet(), currView->getLeftFeatureSet(), false);
@@ -81,7 +81,7 @@ void MonocularOdometry::run(ViewReader *reader, FeatureExtractor *featureExtract
     vector<View*> allViews = viewTracker->getViews();
     vector<View*> keyViews = viewTracker->getKeyViews();
     // poseEstimator->solvePosesPnPStereo(keyViews);
-    poseEstimator->refineScaleStereo(keyViews, trinocular);
+    poseEstimator->refineScaleStereo(keyViews, trinocular, oneDRansac);
     // poseEstimator->solveRatioInTriplets(keyViews, allViews);
    
     views = viewTracker->getKeyViews();

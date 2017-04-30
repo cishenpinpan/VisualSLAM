@@ -36,20 +36,34 @@ int main( int argc, char** argv )
     // start monocular odometry
     vector<Mat> Trs;
     vector<View*> views;
+
     MonocularOdometry *monocularOdometry = new MonocularOdometry();
+
+	cout << "============================Trinocular Stereo=========================" << endl;
     // trinocualr
-    monocularOdometry->run(reader, featureExtractor, featureTracker, viewTracker, poseEstimator, views, TRINOCULAR);
+    monocularOdometry->run(reader, featureExtractor, featureTracker, viewTracker, poseEstimator, views, TRINOCULAR, 0);
     
     // save result to file
     monocularOdometry->save(TRACK, views, "TrinocularStereo");
-    
+   	
+	cout << "===========================Triangulation Stereo==================" << endl;
     // use the views above
     // triangulation
-    monocularOdometry->run(reader, featureExtractor, featureTracker, viewTracker, poseEstimator, views, TRIANGULATION);
+    monocularOdometry->run(reader, featureExtractor, featureTracker, viewTracker, poseEstimator, views, TRIANGULATION, 0);
     
     // save result to file
     monocularOdometry->save(TRACK, views, "ScalePnPStereo");
-    
+	
+	cout << "============Triangulation Stereo with 1D RANSAC==================" << endl;
+	//triangulation with 1d RANSAC
+    monocularOdometry->run(reader, featureExtractor, featureTracker, viewTracker, poseEstimator, views, TRIANGULATION, 1);
+	monocularOdometry->save(TRACK, views, "ScalePnPStereo_1DRANSAC");
+
+	cout << "============Trinocular Stereo with 1D RANSAC==================" << endl;
+	//triangulation with 1d RANSAC
+    monocularOdometry->run(reader, featureExtractor, featureTracker, viewTracker, poseEstimator, views, TRINOCULAR, 1);
+	monocularOdometry->save(TRACK, views, "TrinocularStereo_1DRANSAC");
+
     return 0;
 }
 

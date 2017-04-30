@@ -126,12 +126,12 @@ public:
     PoseEstimator();
     Mat estimatePose(View *v1, View *v2, double lambda = 1.0);
     Mat solvePnP(View *v, map<long, Landmark> landmarkBook);
-    double estimateScaleTrinocularRANSAC(View *stereo, View *v);
+    double estimateScaleTrinocularRANSAC(View *stereo, View *v, bool oneDRansac);
     double solveScalePnP(View *v, const Mat prevPose,  map<long, Landmark> landmarkBook, double initial = 1.0);
-    double solveScalePnPRANSAC(View *v, const Mat prevPose,  map<long, Landmark> landmarkBook, double initial = 1.0);
+    double solveScalePnPRANSAC(View *v, View* vStereo,  map<long, Landmark> landmarkBook, double initial = 1.0, bool oneDRansac = 0);
     ViewTracker* constructTriplet(View *v1, View *v2, View *v3);
     void solveRatioInTriplets(vector<View*> keyViews, vector<View*> allViews);
-    void refineScaleStereo(vector<View*> views, bool trinocular);
+    void refineScaleStereo(vector<View*> views, bool trinocular, bool oneDRansac);
     void solvePosesPnPStereo(vector<View*> views);
     void refineScaleMultipleFramesWithDistribution(vector<View*> views, int N);
 private:
