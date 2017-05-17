@@ -8,6 +8,8 @@
 
 #include "View.h"
 
+using namespace blindfind;
+
 View::View(const vector<Mat> _imgs, int _time)
 {
     imgs = vector<Mat>();
@@ -22,39 +24,6 @@ View::View(const vector<Mat> _imgs, int _time)
     keyView = false;
 }
 
-View::View(const vector<Mat> _imgs, const FeatureSet _leftFeatureSet, int _time)
-{
-    imgs = vector<Mat>();
-    for(int i = 0; i < _imgs.size(); i++)
-    {
-        imgs.push_back(_imgs[i].clone());
-    }
-
-    leftFeatureSet = _leftFeatureSet;
-    stereo = imgs.size() == 2 ? true : false;
-    IdGenerator *idGenerator = IdGenerator::createInstance();
-    id = idGenerator->next();
-    time = _time;
-    keyView = false;
-}
-
-View::View(View* v, int _time)
-{
-    imgs = v->getImgs();
-    leftFeatureSet = v->getLeftFeatureSet();
-    rightFeatureSet = v->getRightFeatureSet();
-    pose = v->getPose().clone();
-    stereo = imgs.size() == 2 ? true : false;
-    IdGenerator *idGenerator = IdGenerator::createInstance();
-    id = idGenerator->next();
-    time = _time;
-    keyView = false;
-}
-
-View::~View()
-{
-    cout << "destructor!!!!" << endl;
-}
 long View::getId()
 {
     return id;

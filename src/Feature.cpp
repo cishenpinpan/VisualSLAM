@@ -8,6 +8,8 @@
 
 #include "Feature.h"
 
+using namespace blindfind;
+
 void FeatureSet::clear()
 {
     // clear feature points and ids
@@ -18,11 +20,11 @@ void FeatureSet::addFeature(Feature feature)
 {
     addFeature(feature.getPoint(), feature.getId());
 }
-Feature FeatureSet::getFeatureById(long id)
+Feature FeatureSet::getFeatureById(long id) const
 {
     if(!idLookup.count(id))
         return NULL;
-    int index = idLookup[id];
+    int index = idLookup.at(id);
     return Feature(featurePoints[index], ids[index]);
     
 }
@@ -30,7 +32,7 @@ void FeatureSet::addFeature(KeyPoint point2d, long id)
 {
     featurePoints.push_back(point2d);
     ids.push_back(id);
-    idLookup[id] = ids.size() - 1;
+    idLookup[id] = int(ids.size() - 1);
 }
 void FeatureSet::removeFeature(const long id)
 {
@@ -49,7 +51,7 @@ void FeatureSet::removeFeature(const long id)
 }
 int FeatureSet::size()
 {
-    return featurePoints.size();
+    return int(featurePoints.size());
 }
 bool FeatureSet::hasId(long id)
 {

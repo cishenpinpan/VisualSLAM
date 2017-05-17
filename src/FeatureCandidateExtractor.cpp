@@ -8,6 +8,8 @@
 
 #include "FeatureCandidateExtractor.h"
 
+using namespace blindfind;
+
 vector<KeyPoint> FeatureCandidateExtractor::extractFeatures(Mat img)
 {
     vector<KeyPoint> keypoints;
@@ -16,7 +18,7 @@ vector<KeyPoint> FeatureCandidateExtractor::extractFeatures(Mat img)
     {
         Ptr<SURF> detector = SURF::create();
         //detector->setNOctaves(6);
-        detector->setNOctaveLayers(10);
+        detector->setNOctaveLayers(3);
         detector->detect(img, keypoints);
         
     }
@@ -43,7 +45,7 @@ Mat FeatureCandidateExtractor::computeDescriptors(const Mat img, vector<KeyPoint
     {
         Ptr<SURF> detector = SURF::create();
         //detector->setNOctaves(6);
-        detector->setNOctaveLayers(10);
+        detector->setNOctaveLayers(3);
         detector->compute(img, keyPoints1,descriptors);
         
     }

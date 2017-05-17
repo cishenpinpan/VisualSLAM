@@ -8,56 +8,49 @@
 
 #ifndef View_h
 #define View_h
-#include "opencv2/features2d.hpp"
-#include "CameraParameters.h"
+
 #include "Feature.h"
 #include "Factory.h"
-#include <iostream>
-#include <vector>
-#include <map>
+#include "Utility.h"
+#include "CameraParameters.h"
 
-using namespace std;
-using namespace cv;
-
-class View
+namespace blindfind
 {
-public:
-    View(View *v, int _time);
-    ~View();
-    View(const vector<Mat> _imgs, int _time);
-    View(const vector<Mat> _imgs, const FeatureSet _leftFeatureSet, int _time);
-    long getId();
-    vector<Mat> getImgs();
-    void setImgs(const vector<Mat> _imgs);
-    void deleteImgs();
-    FeatureSet& getLeftFeatureSet();
-    FeatureSet& getRightFeatureSet();
-    Feature getLeftFeatureById(long id);
-    Feature getRightFeatureById(long id);
-    void removeLeftFeatureById(long id);
-    void removeRightFeatureById(long id);
-    void setLeftFeatures(const FeatureSet _leftFeatureSet);
-    void setRightFeatures(const FeatureSet _rightFeatureSet);
-    void setIdBook(const map<long, int> _idBook);
-    Mat getPose();
-    void setPose(const Mat _pose);
-    void setPose(const Mat _R, const Mat _T);
-    Mat getR();
-    Mat getT();
-    void setKeyView(){keyView = true;}
-    void unsetKeyView(){keyView = false;}
-    bool isKeyView(){return keyView;}
-    bool isStereo(){return stereo;}
-    int getTime(){return time;}
-private:
-    long id;
-    bool keyView;
-    int time;
-    vector<Mat> imgs;
-    FeatureSet leftFeatureSet;
-    FeatureSet rightFeatureSet;
-    Mat pose;
-    bool stereo;
-};
+    class View
+    {
+    public:
+        View(const vector<Mat> _imgs, int _time);
+        FeatureSet& getLeftFeatureSet();
+        FeatureSet& getRightFeatureSet();
+        long getId();
+        vector<Mat> getImgs();
+        void setImgs(const vector<Mat> _imgs);
+        void deleteImgs();
+        void setLeftFeatures(const FeatureSet _leftFeatureSet);
+        void setRightFeatures(const FeatureSet _rightFeatureSet);
+        Mat getPose();
+        void setPose(const Mat _pose);
+        void setPose(const Mat _R, const Mat _T);
+        Mat getR();
+        Mat getT();
+        void setKeyView(){keyView = true;}
+        void unsetKeyView(){keyView = false;}
+        bool isKeyView(){return keyView;}
+        bool isStereo(){return stereo;}
+        int getTime(){return time;}
+        void setGt(const Mat _gt){gt = _gt.clone();}
+        Mat getGt(){return gt.clone();}
+    private:
+        long id;
+        bool keyView;
+        int time;
+        vector<Mat> imgs;
+        FeatureSet leftFeatureSet;
+        FeatureSet rightFeatureSet;
+        Mat pose;
+        Mat gt;
+        bool stereo;
+    };
+}
 
 #endif /* View_h */

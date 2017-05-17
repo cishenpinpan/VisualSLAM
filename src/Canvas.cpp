@@ -8,7 +8,7 @@
 
 #include "Canvas.h"
 
-
+using namespace blindfind;
 
 void Canvas::drawFeatureMatches(Mat img1, Mat img2, vector<Point2f> points1,vector<Point2f> points2)
 {
@@ -22,7 +22,6 @@ void Canvas::drawFeatureMatches(Mat img1, Mat img2, vector<Point2f> points1,vect
         nextKeypoints.push_back(KeyPoint(points2[k], 1.f));
     }
     drawMatches(img1, currKeypoints, img2, nextKeypoints, matches, canvas);
-    
     namedWindow("Display window", WINDOW_AUTOSIZE);
     imshow("Display window", canvas);
     waitKey(0);
@@ -114,15 +113,20 @@ void Canvas::drawLinesAndPoints(Mat img, vector<Point2f> starts, vector<Point2f>
     Mat tmp = img.clone();
     int thickness = 0.5;
     int lineType = LINE_8;
-    for(int i = 0; i < starts.size(); i++)
+    srand(int(time(NULL)));
+    for(int i = 10; i < starts.size(); i += 2)
     {
-        line( tmp,starts[i],ends[i],Scalar( 255, 0, 0 ),thickness,lineType );
+        int r = rand() % 255, g = rand() % 255, b = rand() % 255;
+        line( tmp,starts[i],ends[i],Scalar( r, g, b ),thickness, LINE_8 );
+        line( tmp,starts[i + 1],ends[i + 1],Scalar( r, g, b ),thickness, CV_AA);
+        vector<KeyPoint> tmpKps;
+        tmpKps.push_back(points[i / 2]);
+        drawKeypoints(tmp, tmpKps, tmp, Scalar(r, g, b));
+        namedWindow("LineAndPoints", WINDOW_AUTOSIZE);
+        imshow("Line", tmp);
+        waitKey(0);
     }
-    drawKeypoints(tmp, points, tmp);
-        
-    namedWindow("LineAndPoints", WINDOW_AUTOSIZE);
-    imshow("Line", tmp);
-    waitKey(0);
+    
 }
 
 void Canvas::drawTrackingPath(Mat img, vector<Point2f> keyPoints1, vector<Point2f> keyPoints2)

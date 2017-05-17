@@ -8,11 +8,11 @@
 
 #include "ViewTracker.h"
 
+using namespace blindfind;
+
 ViewTracker::ViewTracker()
 {
-    featureTracker = new FeatureTracker();
-    featureExtractor = new FeatureExtractor();
-    nBundleAdjusted = 0;
+    ;
 }
 ViewTracker::~ViewTracker()
 {
@@ -34,7 +34,7 @@ void ViewTracker::setKeyView(View *v)
         keyViews.push_back(v);
     }
 }
-void ViewTracker::computeLandmarks(bool initial)
+void ViewTracker::computeLandmarks()
 {
     // triangulate feature correspondences in keyframes and update landmark book
     View *prevView = keyViews[keyViews.size() - 2];
@@ -53,15 +53,6 @@ void ViewTracker::computeLandmarks(bool initial)
         
         triangulatePoint(prevView->getPose(), currView->getPose(),
                          prevFeature.getPoint(), currFeature.getPoint(), point3d);
-//        vector<Point3d> tmp;
-//        vector<KeyPoint> kps1, kps2;
-//        vector<Point2f> ps1, ps2;
-//        kps1.push_back(prevFeature.getPoint());
-//        kps2.push_back(currFeature.getPoint());
-//        KeyPoint::convert(kps1, ps1);
-//        KeyPoint::convert(kps2, ps2);
-//        triangulatePoints(prevView->getPose(), prevView->getPose().inv() * currView->getPose(), ps1, ps2, tmp);
-//        point3d = tmp[0];
         Landmark *landmark = new Landmark(point3d, id, {prevView->getId(), currView->getId()});
         // reproject 3d point
         // add to landmark book if this feature is not yet triangulated
@@ -81,7 +72,7 @@ void ViewTracker::computeLandmarks(bool initial)
 void ViewTracker::computeLandmarksStereo()
 {
     // triangulate feature correspondences in keyframes and update landmark book
-    View *firstView = views.front();
+    View *firstView = keyViews.front();
     Canvas *canvas = new Canvas();
     vector<double> depths;
     for(int i = 0; i < firstView->getLeftFeatureSet().size(); i++)
@@ -99,13 +90,7 @@ void ViewTracker::computeLandmarksStereo()
         triangulatePoint(leftPose, rightPose,
                          leftKp, rightKp, point3d);
         Landmark *landmark = new Landmark(point3d, id, {firstView->getId(), firstView->getId()});
-        // compute descriptor
-        Ptr<SURF> extractor = SURF::create();
-        Mat descriptor;
-        vector<KeyPoint> tmp;
-        tmp.push_back(leftKp);
-        extractor->compute(firstView->getImgs()[0], tmp, descriptor);
-        landmark->setDescriptor(descriptor);
+
         // reproject 3d point
         // add to landmark book if this feature is not yet triangulated
         if(!landmarkBook.count(id))
@@ -114,7 +99,7 @@ void ViewTracker::computeLandmarksStereo()
             pair<double, double> err2 = reproject3DPoint(point3d,  rightPose, rightKp, false);
             double l2NormError = sqrt(err.first * err.first + err.second * err.second);
             double l2NormError2 = sqrt(err2.first * err2.first + err2.second * err2.second);
-            if(l2NormError < 1 && l2NormError2 < 1)
+            if(l2NormError < 30 && l2NormError2 < 30)
             {
                 landmarkBook.insert(make_pair(id, *landmark));
             }
@@ -124,43 +109,6 @@ void ViewTracker::computeLandmarksStereo()
 void ViewTracker::eraseLandmarks()
 {
     landmarkBook.clear();
-}
-void ViewTracker::refineLandmarks(View *v1, View *v2)
-{
-    // for each common feature
-    // refine its 3d location in landmark book
-    map<long, vector<KeyPoint> > commonFeatures;
-    FeatureSet featureSet_v1 = v1->getLeftFeatureSet();
-    FeatureSet featureSet_v2 = v2->getLeftFeatureSet();
-    for(int i = 0; i < featureSet_v1.size(); i++)
-    {
-        long id = featureSet_v1.getIds()[i];
-        commonFeatures[id].push_back(featureSet_v1.getFeaturePoints()[i]);
-    }
-    for(int i = 0; i < featureSet_v2.size(); i++)
-    {
-        long id = featureSet_v2.getIds()[i];
-        commonFeatures[id].push_back(featureSet_v2.getFeaturePoints()[i]);
-    }
-    // remove in-common features
-    for(map<long, vector<KeyPoint>>::iterator it = commonFeatures.begin(); it != commonFeatures.end(); )
-    {
-        long id = it->first;
-        if(it->second.size() < 2)
-            it = commonFeatures.erase(it);
-        else
-            it++;
-    }
-    for(map<long, vector<KeyPoint> >::iterator it = commonFeatures.begin();
-        it != commonFeatures.end(); it++)
-    {
-        long id = it->first;
-        KeyPoint kp_v1 = it->second[0], kp_v2 = it->second[1];
-        // triangulate
-        Point3d p3d;
-        triangulatePoint(v1->getPose(), v2->getPose(), kp_v1, kp_v2, p3d);
-        landmarkBook[id].setPoint(p3d);
-    }
 }
 void ViewTracker::updateLandmarks(map<long, Landmark> &ref)
 {
@@ -241,7 +189,7 @@ void ViewTracker::bundleAdjust(int option, bool global)
     }
     
     // setting up camera poses as vertices
-    int start = max(0, int(viewsForBA.size()) - BUNDLE_ADJUSTMENT_LENGTH);
+    int start = global ? 0 : max(0, int(viewsForBA.size()) - BUNDLE_ADJUSTMENT_LENGTH);
     vector<g2o::SE3Quat, aligned_allocator<g2o::SE3Quat> > truePoses;
     for (int i = start; i < viewsForBA.size(); i++)
     {
@@ -265,8 +213,6 @@ void ViewTracker::bundleAdjust(int option, bool global)
     // setting up landmarks as vertices
     Canvas *canvas = new Canvas();
     const float thHuber = sqrt(5.991);
-    vector<int> counts(BUNDLE_ADJUSTMENT_LENGTH, 0);
-    vector<double> errors(BUNDLE_ADJUSTMENT_LENGTH, 0.0);
     for (map<long, Landmark>::iterator landmarkIter = landmarkBook.begin();
                         landmarkIter != landmarkBook.end(); landmarkIter++)
     {
@@ -282,7 +228,6 @@ void ViewTracker::bundleAdjust(int option, bool global)
         optimizer.addVertex(v_p);
         for (int j = start; j < viewsForBA.size(); j++)
         {
-            
             // Add edges. See the following passage.
             if(!viewsForBA[j]->getLeftFeatureSet().hasId(id))
                 continue;
@@ -304,17 +249,9 @@ void ViewTracker::bundleAdjust(int option, bool global)
             e->setRobustKernel(rk);
             rk->setDelta(thHuber);
             optimizer.addEdge(e);
-            counts[j - start]++;
-            errors[j - start] += l2NormError;
-            
-            
         }
     }
-//    for (int j = start; j < keyViews.size(); j++)
-//    {
-//        cout << "Frame (" << keyViews[j]->getId() << "): " << counts[j - start] << "--> " <<
-//                errors[j - start] / counts[j - start] << endl;
-//    }
+
     optimizer.setVerbose(false);
     // optimizer.save("/Users/orangechicken/Desktop/SLAM/g2o_data/firstInput.g2o");
     
@@ -376,5 +313,4 @@ void ViewTracker::bundleAdjust(int option, bool global)
     }
     
     // update nBundleAdjust
-    nBundleAdjusted = int(viewsForBA.size());
 }

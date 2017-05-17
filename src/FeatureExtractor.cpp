@@ -7,7 +7,8 @@
 //
 
 #include "FeatureExtractor.h"
-#include "Canvas.h"
+
+using namespace blindfind;
 
 vector<KeyPoint> FeatureExtractor::extractFeatures(Mat img, FeatureSet& featureSet)
 {
@@ -17,7 +18,7 @@ vector<KeyPoint> FeatureExtractor::extractFeatures(Mat img, FeatureSet& featureS
     {
         Ptr<SURF> detector = SURF::create();
         //detector->setNOctaves(6);
-        detector->setNOctaveLayers(10);
+        detector->setNOctaveLayers(3);
         detector->detect(img, keypoints);
     }
     else if (_featureName == "ORB")
@@ -55,7 +56,7 @@ vector<KeyPoint> FeatureExtractor::reextractFeatures(Mat img, FeatureSet& featur
     {
         Ptr<SURF> detector = SURF::create();
         //detector->setNOctaves(6);
-        detector->setNOctaveLayers(10);
+        detector->setNOctaveLayers(3);
         detector->detect(img, keypoints);
     }
     else if (_featureName == "ORB")
@@ -68,14 +69,11 @@ vector<KeyPoint> FeatureExtractor::reextractFeatures(Mat img, FeatureSet& featur
     }
     else
     {
-        std::cout << "Not Supported" << std::endl;
+        std::cout << "Feature not supported" << std::endl;
     }
- 
     // append newly extracted feature points back to existing feature set
     map<double, set<double>> existingPointSet;
     vector<KeyPoint> existingPoints = featureSet.getFeaturePoints();
-    //	Canvas canvas;
-    //	canvas.drawKeyPoints(img,keypoints,"Change threshold");
     for(int i = 0; i < existingPoints.size(); i++)
         existingPointSet[existingPoints[i].pt.x].insert(existingPoints[i].pt.y);
     

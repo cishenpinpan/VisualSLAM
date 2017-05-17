@@ -13,7 +13,7 @@
 #define DESCRIPTOR_NAME "SURF"
 #define FEATURE_REDETECTION_TRIGGER 200
 
-#define NUM_POSES 1100
+#define NUM_POSES 5
 #define BUNDLE_ADJUSTMENT_LENGTH 5
 #define KEYFRAME_INTERVAL 5
 
@@ -31,10 +31,13 @@
 #define RATIO_ERROR_THRESHOLD 0.08
 #define SPEED_ERROR_THRESHOLD 0.15
 
-#define RANSAC_CONFIDENCE 0.9
+#define RANSAC_CONFIDENCE 0.95
 
-#define TRACK "06"
-#define START_FRAME 0
+#define IMG_HEIGHT 1280
+#define IMG_WIDTH 800
+
+#define TRACK "20"
+#define START_FRAME 396
 #define IMAGE_DIR "/Users/orangechicken/Documents/MATLAB/KITTI/"
 #define GROUNDTRUTH_DIR "/Users/orangechicken/Documents/MATLAB/KITTI/GroundTruth/poses/"
 #define OUTPUT_DIR "/Users/orangechicken/Desktop/SLAM/KITTI_"

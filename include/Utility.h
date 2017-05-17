@@ -9,24 +9,8 @@
 #ifndef Utility_h
 #define Utility_h
 
-#include <stdio.h>
-#include <algorithm>
-#include <opencv2/opencv.hpp>
-#include "opencv2/core.hpp"
-#include "opencv2/features2d.hpp"
-#include "opencv2/core/affine.hpp"
-#include "opencv2/calib3d/calib3d_c.h"
-#include "opencv2/plot.hpp"
-#include "opencv2/highgui/highgui.hpp"
-#include "CameraParameters.h"
-#include "FeatureTracker.h"
-#include "FeatureExtractor.h"
-#include "Canvas.h"
-//#include <cvsba/cvsba.h>
-#include <set>
+#include "View.h"
 
-using namespace std;
-using namespace cv;
 
 void triangulatePoint(const Mat pose1, const Mat pose2, const KeyPoint point1, const KeyPoint point2, Point3d& point3d);
 
@@ -37,6 +21,7 @@ void triangulatePoints(Mat globalPose, Mat relativePose, vector<Point2f> points1
                        vector<Point2f> points2, vector<Point3d> &points3D);
 
 vector<double> rot2quat(const Mat R);
+vector<double> rot2angles(const Mat &R);
 
 Mat anglesToRotationMatrix(const Mat &theta);
 

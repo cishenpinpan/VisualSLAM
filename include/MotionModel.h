@@ -9,9 +9,6 @@
 #ifndef MotionModel_h
 #define MotionModel_h
 
-#include <stdio.h>
-#include "View.h"
-
 using namespace std;
 
 class MotionModel
@@ -23,7 +20,5 @@ public:
         double s = s2 + a * (t - t2);
         return s;
     }
-    
-    
 };
 #endif /* MotionModel_hpp */

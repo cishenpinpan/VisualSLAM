@@ -8,12 +8,12 @@
 
 #include "FeatureTracker.h"
 
+using namespace blindfind;
+
 bool LEFT_CAMERA = true, RIGHT_CAMERA = false;
 
-void FeatureTracker::kltTrack(const Mat img1, const Mat img2, FeatureSet& featureSet1, FeatureSet& featureSet2, bool stereo)
+void FeatureTracker::kltTrack(const Mat img1, const Mat img2, const FeatureSet& featureSet1, FeatureSet& featureSet2)
 {
-    Canvas canvas;
-    
     //Do KLT track between two images
     vector<KeyPoint> keyPoints1 = featureSet1.getFeaturePoints();
     vector<Point2f> points1 = Converter::keyPointsToPoint2fs(keyPoints1), trackings;
@@ -35,7 +35,7 @@ void FeatureTracker::kltTrack(const Mat img1, const Mat img2, FeatureSet& featur
     for (int i = 0; i < status.size(); i++)
     {
         Point2f t = trackings[i];
-        if(t.x <= 0 || t.x >= 1281 || t.y <= 0 || t.y >= 376)
+        if(t.x <= 0 || t.x >= IMG_HEIGHT || t.y <= 0 || t.y >= IMG_WIDTH)
         {
             status[i] = (uchar)0;
         }
@@ -58,30 +58,24 @@ void FeatureTracker::kltTrack(const Mat img1, const Mat img2, FeatureSet& featur
         }
     }
     
-    // featureSet1.setFeaturePoints(newFeatures1);
-    // featureSet1.setIds(newIds);
     featureSet2.setFeaturePoints(newFeatures2);
     featureSet2.setIds(newIds);
 }
 
 void FeatureTracker::refineTrackedFeatures
-            (Mat img1, Mat img2, FeatureSet& featureSet1, FeatureSet& featureSet2, bool stereo)
+            (Mat img1, Mat img2, const FeatureSet& featureSet1, FeatureSet& featureSet2)
 {
     Canvas canvas;
-    clock_t t0, t1, t2, t3, t4, t5;
-    t0 = clock();
     vector<KeyPoint> keyPointsFirstView;
     vector<KeyPoint> trackedPointsLastView = featureSet2.getFeaturePoints();
     for (int j = 0; j < featureSet2.size(); j++)
     {
         keyPointsFirstView.push_back(featureSet1.getFeatureById(featureSet2.getIds()[j]).getPoint());
     }
-    t1 = clock();
     // Create feature extractor object
     FeatureCandidateExtractor extractor;
     //Compute descriptors from the last view
     vector<KeyPoint> keyPointsLastView = extractor.extractFeatures(img2);
-    t2 = clock();
     Mat descriptorsLastView = extractor.computeDescriptors(img2, keyPointsLastView);
 //    extractor.computeDescriptors(img1, keyPointsLastView);
     
@@ -93,7 +87,6 @@ void FeatureTracker::refineTrackedFeatures
         KeyPoint kp = keyPointsLastView[i];
         cornerMap[int(kp.pt.x)][int(kp.pt.y)].push_back(pair<KeyPoint, Mat>(kp, descriptorsLastView.row(i)));
     }
-    t3 = clock();
     vector<KeyPoint> newKeyPoints1, newKeyPoints2;
     vector<long> prevIds = featureSet2.getIds(), newIds;
     int winSize = 2;
@@ -157,18 +150,9 @@ void FeatureTracker::refineTrackedFeatures
         }
         
     }
-    t4 = clock();
-    // featureSet1.setFeaturePoints(newKeyPoints1);
-    // featureSet1.setIds(newIds);
+
     featureSet2.setFeaturePoints(newKeyPoints2);
     featureSet2.setIds(newIds);
-    t5 = clock();
-//    cout << (float(t1) - float(t0)) / CLOCKS_PER_SEC << endl;
-//    cout << (float(t2) - float(t1)) / CLOCKS_PER_SEC << endl;
-//    cout << (float(t3) - float(t2)) / CLOCKS_PER_SEC << endl;
-//    cout << (float(t4) - float(t3)) / CLOCKS_PER_SEC << endl;
-//    cout << (float(t5) - float(t4)) / CLOCKS_PER_SEC << endl;
-//    cout << ".........." << endl;
 }
 
 // Assume features are extracted in the first view
@@ -179,18 +163,21 @@ void FeatureTracker::trackAndMatch(vector<View*> views)
     for(int i = 0; i < views.size() - 1; i++)
     {
         View *v1 = views[i], *v2 = views[i + 1];
-        kltTrack(v1->getImgs()[0], v2->getImgs()[0], v1->getLeftFeatureSet(), v2->getLeftFeatureSet(), false);
+        kltTrack(v1->getImgs()[0], v2->getImgs()[0], v1->getLeftFeatureSet(), v2->getLeftFeatureSet());
+        // kltTrack(v1->getImgs()[1], v2->getImgs()[1], v1->getRightFeatureSet(), v2->getRightFeatureSet());
     }
     // refine (Lowe's)
     View *v1 = views[0], *v2 = views.back();
-    refineTrackedFeatures(v1->getImgs()[0], v2->getImgs()[0], v1->getLeftFeatureSet(), v2->getLeftFeatureSet(), false);
+    refineTrackedFeatures(v1->getImgs()[0], v2->getImgs()[0], v1->getLeftFeatureSet(), v2->getLeftFeatureSet());
+    refineTrackedFeatures(v1->getImgs()[1], v2->getImgs()[1], v1->getRightFeatureSet(), v2->getRightFeatureSet());
 }
 void FeatureTracker::track(vector<View*> views)
 {
     for(int i = 0; i < views.size() - 1; i++)
     {
         View *v1 = views[i], *v2 = views[i + 1];
-        kltTrack(v1->getImgs()[0], v2->getImgs()[0], v1->getLeftFeatureSet(), v2->getLeftFeatureSet(), false);
+        kltTrack(v1->getImgs()[0], v2->getImgs()[0], v1->getLeftFeatureSet(), v2->getLeftFeatureSet());
+        // kltTrack(v1->getImgs()[1], v2->getImgs()[1], v1->getRightFeatureSet(), v2->getRightFeatureSet());
     }
 }
 
@@ -198,8 +185,8 @@ void FeatureTracker::trackAndMatch(View *v)
 {
     if(v->isStereo())
     {
-        kltTrack(v->getImgs()[0], v->getImgs()[1], v->getLeftFeatureSet(), v->getRightFeatureSet(), false);
-        refineTrackedFeatures(v->getImgs()[0], v->getImgs()[1], v->getLeftFeatureSet(), v->getRightFeatureSet(), false);
+        kltTrack(v->getImgs()[0], v->getImgs()[1], v->getLeftFeatureSet(), v->getRightFeatureSet());
+        refineTrackedFeatures(v->getImgs()[0], v->getImgs()[1], v->getLeftFeatureSet(), v->getRightFeatureSet());
     }
 }
 
@@ -207,7 +194,7 @@ void FeatureTracker::track(View *v)
 {
     if(v->isStereo())
     {
-        kltTrack(v->getImgs()[0], v->getImgs()[1], v->getLeftFeatureSet(), v->getRightFeatureSet(), false);
+        kltTrack(v->getImgs()[0], v->getImgs()[1], v->getLeftFeatureSet(), v->getRightFeatureSet());
     }
 }
 

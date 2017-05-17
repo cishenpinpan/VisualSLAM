@@ -8,7 +8,7 @@
 
 #include "Utility.h"
 
-IdGenerator* IdGenerator::instance = NULL;
+blindfind::IdGenerator* blindfind::IdGenerator::instance = NULL;
 
 void triangulatePoint(const Mat pose1, const Mat pose2, const KeyPoint point1, const KeyPoint point2, Point3d& point3d)
 {
@@ -17,7 +17,7 @@ void triangulatePoint(const Mat pose1, const Mat pose2, const KeyPoint point1, c
     const Mat relativePose = pose1.inv() * pose2;
     const Mat relativeR = relativePose(Rect(0, 0, 3, 3));
     const Mat relativeT = relativePose(Rect(3, 0, 1, 3));
-    const Mat invK = CameraParameters::getIntrinsic().inv();
+    const Mat invK = blindfind::CameraParameters::getIntrinsic().inv();
     
     Mat homo1(3, 1, CV_64F), homo2(3, 1, CV_64F);
     homo1.at<double>(0, 0) = point1.pt.x;
@@ -118,7 +118,7 @@ void triangulatePoints(Mat globalPose, Mat relativePose, vector<Point2f> points1
         cout << "Number of feature not equal." << endl;
         return ;
     }
-    Mat K = CameraParameters::getIntrinsic();
+    Mat K = blindfind::CameraParameters::getIntrinsic();
     Mat invK = K.inv();
     Mat globalR = globalPose(Rect(0, 0, 3, 3));
     Mat globalT = globalPose(Rect(3, 0, 1, 3));
@@ -135,8 +135,6 @@ void triangulatePoints(Mat globalPose, Mat relativePose, vector<Point2f> points1
         homo2.at<double>(2, 0) = 1.0;
         homo1 = invK * homo1;
         homo2 = invK * homo2;
-        cout << homo1 << endl;
-        cout << homo2 << endl;
         Mat v1 = homo1;
         Mat v2 = -relativeR * homo2;
         Mat A(3, 2, CV_64F);
@@ -173,7 +171,30 @@ vector<double> rot2quat(const Mat R)
     double qz = (r21 - r12) / (4 * qw);
     return {qw, qx, qy, qz};
 }
-
+// Calculates rotation matrix to euler angles
+// The result is the same as MATLAB except the order
+// of the euler angles ( x and z are swapped ).
+vector<double> rot2angles(const Mat &R)
+{
+    float sy = sqrt(R.at<double>(0,0) * R.at<double>(0,0) +  R.at<double>(1,0) * R.at<double>(1,0) );
+    
+    bool singular = sy < 1e-6; // If
+    
+    double x, y, z;
+    if (!singular)
+    {
+        x = atan2(R.at<double>(2,1) , R.at<double>(2,2));
+        y = atan2(-R.at<double>(2,0), sy);
+        z = atan2(R.at<double>(1,0), R.at<double>(0,0));
+    }
+    else
+    {
+        x = atan2(-R.at<double>(1,2), R.at<double>(1,1));
+        y = atan2(-R.at<double>(2,0), sy);
+        z = 0;
+    }
+    return {x, y, z};
+}
 pair<double, double> reproject3DPoint(Point3d point3d, Mat pose, KeyPoint point2d, bool L2Norm)
 {
     Mat R = pose(Rect(0, 0, 3, 3)).clone();
@@ -187,7 +208,7 @@ pair<double, double> reproject3DPoint(Point3d point3d, Mat pose, KeyPoint point2
         cout << endl;
     }
     Mat homoC = gammaC / gammaC.at<double>(2, 0);
-    Mat pixelC = CameraParameters::getIntrinsic() * homoC;
+    Mat pixelC = blindfind::CameraParameters::getIntrinsic() * homoC;
     pair<double, double> error = {0.0, 0.0};
     
     if(L2Norm)
@@ -213,7 +234,8 @@ double projectEpipolarLine(const Mat E, Point2f point1, Point2f point2)
     pixel2.at<double>(0, 0) = point2.x;
     pixel2.at<double>(1, 0) = point2.y;
     pixel2.at<double>(2, 0) = 1;
-    Mat F = CameraParameters::getIntrinsic().inv().t() * E * CameraParameters::getIntrinsic().inv();
+    Mat F = blindfind::CameraParameters::getIntrinsic().inv().t()
+                        * E * blindfind::CameraParameters::getIntrinsic().inv();
     Mat line = F * pixel2;
     double A = line.at<double>(0, 0);
     double B = line.at<double>(1, 0);
